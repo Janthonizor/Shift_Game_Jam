@@ -13,3 +13,6 @@ you get launched by a cannon and the only control is shift
 submit times to server
 
 maintain a record for each attempt of each level and allow a playable ghost
+
+
+write in html
