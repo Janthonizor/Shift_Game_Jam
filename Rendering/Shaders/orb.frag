@@ -52,12 +52,12 @@ void main() {
 
     // Radial/angular pattern
     float pattern = cos(
-        angle * 6.0 + distance * 0.08
+        angle * 5.0 + distance * 0.08
     );
 
     float patternLine = smoothstep(
         -0.3,
-        0.9,
+        0.7,
         pattern
     );
 
@@ -86,7 +86,7 @@ void main() {
 
     vec3 color = mix(
         u_color.rgb,
-        vec3(1.0),
+        vec3(0.75),
         patternAlpha
     );
 

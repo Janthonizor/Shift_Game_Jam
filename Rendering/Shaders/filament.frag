@@ -83,10 +83,13 @@ void main() {
 
     float t = clamp(along, 0.0, 1.0);
 
-    float zoomThickness = max(u_zoom, 0.5);
+    float zoomThickness = max(u_zoom, 0.001);
 
     float mainDistance = 1000.0;
     float bundleDistance = 1000.0;
+
+    float filamentCore = 0.0;
+    float filamentBody = 0.0;
 
 
     // --------------------------------------------------------
@@ -100,15 +103,11 @@ void main() {
         0.0,
         3.0 * zoomThickness,
         30.0,
-        1.2 * zoomThickness
+        3.2 * zoomThickness
     );
 
 
-    // --------------------------------------------------------
-    // Secondary filaments
-    // --------------------------------------------------------
-
-    for (int i = 0; i < 5; i++) {
+    for (int i = 0; i < 4; i++) {
 
         float fi = float(i);
 
@@ -117,12 +116,15 @@ void main() {
         float side = mod(fi, 2.0) < 1.0 ? 1.0 : -1.0;
 
         float baseOffset =
-            side * (5.0 + fi * 1.1) * zoomThickness;
+            side * (4.0 + fi * 2.8) * zoomThickness;
 
         float amplitude =
-            (3.0 + fi * 0.6) * zoomThickness;
+            (3.0 + fi * 1.9) * zoomThickness;
 
-        float frequency = 24.0 + fi * 8.0;
+        float frequency = 14.0 + fi * 8.0;
+
+        float thickness =
+            (1.15 + 0.35 * mod(fi, 2.0)) * zoomThickness;
 
         float d = strand(
             across,
@@ -131,10 +133,25 @@ void main() {
             phase,
             amplitude,
             frequency,
-            (0.65 + 0.15 * mod(fi, 2.0)) * zoomThickness
+            thickness
         );
 
         bundleDistance = min(bundleDistance, d);
+
+        float core = 1.0 - smoothstep(
+            -0.5 * zoomThickness,
+            0.5 * zoomThickness,
+            d
+        );
+
+        float body = 1.0 - smoothstep(
+            0.0,
+            thickness * 1.5,
+            d
+        );
+
+        filamentCore = max(filamentCore, core);
+        filamentBody = max(filamentBody, body);
     }
 
 
@@ -182,11 +199,18 @@ void main() {
 
     intensity *= pulse;
 
-    vec3 color = mix(
-        u_color.rgb * 0.85,
-        vec3(1.0),
-        core * 0.85
+    float gray = clamp(
+        0.025
+        + glow * 0.04
+        + filaments * 0.12
+        + filamentBody * 0.30
+        + filamentCore * 0.35
+        + core * 0.65,
+        0.0,
+        0.85
     );
+
+    vec3 color = vec3(gray);
 
     float alpha = clamp(
         intensity * u_color.a,
@@ -196,5 +220,5 @@ void main() {
 
     if (alpha < 0.005) discard;
 
-    outColor = vec4(color * intensity, alpha);
+    outColor = vec4(color, alpha);
 }

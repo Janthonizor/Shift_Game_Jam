@@ -23,7 +23,7 @@ const [
     filamentShaderSource
 ] = await Promise.all([
     loadShader(new URL("./Shaders/vertex.vert", import.meta.url)),
-    loadShader(new URL("./Shaders/fragment.frag", import.meta.url)),
+    loadShader(new URL("./Shaders/dithering.frag", import.meta.url)),
     loadShader(new URL("./Shaders/player.frag", import.meta.url)),
     loadShader(new URL("./Shaders/orb.frag", import.meta.url)),
     loadShader(new URL("./Shaders/filament.frag", import.meta.url))
@@ -35,7 +35,10 @@ export class Renderer {
 
     constructor(canvas) {
 
+        this.ditherObject = ditheringSettings;
+
         this.canvas = canvas;
+
         this.gl = canvas.getContext("webgl2");
 
         if (!this.gl) {
@@ -46,49 +49,32 @@ export class Renderer {
 
         gl.viewport(0, 0, canvas.width, canvas.height);
 
-        gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
 
 
-        this.program = this.createProgram(
+        this.ditheringProgram = this.createProgram(
             gl,
             vertexShaderSource,
             fragmentShaderSource
         );
 
-        this.playerProgram = this.createShapeProgram(
+        this.playerProgram = this.createProgram(
+            gl,
+            vertexShaderSource,
             playerShaderSource
         );
 
-        this.orbProgram = this.createShapeProgram(
+        this.orbProgram = this.createProgram(
+            gl,
+            vertexShaderSource,
             orbShaderSource
         );
 
-        this.filamentProgram = this.createShapeProgram(
+        this.filamentProgram = this.createProgram(
+            gl,
+            vertexShaderSource,
             filamentShaderSource
         );
 
-
-        this.resolutionLocation = gl.getUniformLocation(
-            this.program,
-            "u_resolution"
-        );
-
-        this.textureLocation = gl.getUniformLocation(
-            this.program,
-            "u_texture"
-        );
-
-
-        this.positionLocation = gl.getAttribLocation(
-            this.program,
-            "a_position"
-        );
-
-        this.texCoordLocation = gl.getAttribLocation(
-            this.program,
-            "a_texCoord"
-        );
 
         this.ditheringEnabled = true;
 
@@ -96,135 +82,107 @@ export class Renderer {
 
         this.vertexBuffer = gl.createBuffer();
 
-        this.ditheringUniforms = {
-            worldDithering: gl.getUniformLocation(
-                this.program,
-                "u_worldDithering"
-            ),
-            backgroundPosition: gl.getUniformLocation(
-                this.program,
-                "u_backgroundPosition"
-            ),
 
-            backgroundSize: gl.getUniformLocation(
-                this.program,
-                "u_backgroundSize"
-            ),
-            enabled: gl.getUniformLocation(
-                this.program, 
-                "u_ditheringEnabled"
-            ),
-            matrixSize: gl.getUniformLocation(
-                this.program,
-                "u_matrixSize"
-            ),
-            bayerMatrix: gl.getUniformLocation(
-                this.program, 
-                "u_bayerMatrix[0]"
-            ),
-            palette: gl.getUniformLocation(
-                this.program, 
-                "u_palette[0]"
-            ),
-            cutoffs: gl.getUniformLocation(
-                this.program, 
-                "u_cutoffs[0]"
-            ),
-            cutoffStrength: gl.getUniformLocation(
-                this.program, 
-                "u_cutoffStrength"
-            ),
+        this.playerSettings = {
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
 
-            cameraPosition: gl.getUniformLocation(this.program, "u_cameraPosition"),
-            zoom: gl.getUniformLocation(this.program, "u_zoom")
+            uniforms: {
+                u_resolution:      { type: "2fv" },
+                u_size:            { type: "2fv" },
+                u_color:           { type: "4fv" },
+                u_playerPosition:  { type: "2fv" },
+                u_centerPosition:  { type: "2fv" },
+                u_playerRadius:    { type: "1f" },
+                u_rippleDistance:  { type: "1f" },
+                u_zoom:            { type: "1f" },
+                u_tailA:           { type: "2fv" },
+                u_tailB:           { type: "2fv" },
+                u_tailC:           { type: "2fv" },
+                u_hasTail:         { type: "1i" },
+                u_speed:           { type: "1f" },
+                u_time:            { type: "1f" },
+                u_showBorder:      { type: "1i" }
+            }
         };
 
-        this.uploadDitheringSettings(ditheringSettings);
+        this.orbSettings = {
+
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
+
+            uniforms: {
+                u_resolution:  { type: "2fv" },
+                u_size:        { type: "2fv" },
+                u_color:       { type: "4fv" },
+                u_time:        { type: "1f" },
+                u_zoom:        { type: "1f" },
+                u_active:      { type: "1i" },
+                u_alignment:   { type: "1f" },
+                u_spinAngle:   { type: "1f" }
+            }
+        };
+
+        this.filamentSettings = {
+
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
+
+            uniforms: {
+                u_resolution: { type: "2fv" },
+                u_size:       { type: "2fv" },
+                u_start:      { type: "2fv" },
+                u_end:        { type: "2fv" },
+                u_zoom:       { type: "1f" },
+                u_time:       { type: "1f" },
+                u_color:      { type: "4fv" }
+            }
+        };
+
+        this.ditheringSettings = {
+
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
+
+            uniforms: {
+                u_resolution:          { type: "2fv" },
+                u_texture:             { type: "1i" },
+                u_ditheringEnabled:    { type: "1i" },
+
+                u_matrixSize:          { type: "1i", value: this.ditherObject.matrixSize },
+                "u_bayerMatrix[0]":    { type: "1fv", value: new Float32Array(this.ditherObject.bayerMatrix) },
+                "u_palette[0]":        { type: "3fv", value: new Float32Array(this.ditherObject.palette.flat().map(value => value / 255)) },
+                "u_cutoffs[0]":        { type: "1fv", value: new Float32Array(this.ditherObject.cutoffs) },
+                u_cutoffStrength:      { type: "1f", value: this.ditherObject.cutoffStrength },
+
+                u_worldDithering:      { type: "1i" },
+                u_backgroundPosition:  { type: "2fv" },
+                u_backgroundSize:      { type: "2fv" },
+
+                u_cameraPosition:      { type: "2fv" },
+                u_zoom:                { type: "1f" }
+            }
+        };
+
+        this.uploadShaderSettings(this.playerSettings, this.playerProgram);
+        this.uploadShaderSettings(this.orbSettings, this.orbProgram);
+        this.uploadShaderSettings(this.filamentSettings, this.filamentProgram);
+        this.uploadShaderSettings(this.ditheringSettings, this.ditheringProgram);
+
 
         this.darkTexture = this.createDarkTexture();
+
         this.createSceneFramebuffer();
     }
 
-    createShapeProgram(fragmentSource) {
-
-        const gl = this.gl;
-
-        const program = this.createProgram(
-            gl,
-            vertexShaderSource,
-            fragmentSource
-        );
-
-        return {
-            program,
-
-            zoom: gl.getUniformLocation(program, "u_zoom"),
-
-            tailA: gl.getUniformLocation(program, "u_tailA"),
-
-            tailB: gl.getUniformLocation(program, "u_tailB"),
-
-            tailC: gl.getUniformLocation(program, "u_tailC"),
-
-            hasTail: gl.getUniformLocation(program, "u_hasTail"),
-
-            speed: gl.getUniformLocation(program, "u_speed"),
-
-            start: gl.getUniformLocation(program, "u_start"),
-
-            end: gl.getUniformLocation(program, "u_end"),
-
-            active: gl.getUniformLocation(
-                program,
-                "u_active"
-            ),
-
-            alignment: gl.getUniformLocation(
-                program,
-                "u_alignment"
-            ),
-
-            spinAngle: gl.getUniformLocation(
-                program,
-                "u_spinAngle"
-            ),
-
-            position: gl.getAttribLocation(
-                program, "a_position"
-            ),
-
-            texCoord: gl.getAttribLocation(
-                program, "a_texCoord"
-            ),
-
-            size: gl.getUniformLocation(
-                program, "u_size"
-            ),
-
-            color: gl.getUniformLocation(
-                program, "u_color"
-            ),
-
-            time: gl.getUniformLocation(
-                program, "u_time"
-            ),
-            resolution: gl.getUniformLocation(
-                program, "u_resolution"
-            ),
-            playerPosition: gl.getUniformLocation(
-                program, "u_playerPosition"
-            ),
-
-            centerPosition: gl.getUniformLocation(
-                program, "u_centerPosition"
-            ),
-
-            playerRadius: gl.getUniformLocation(
-                program, "u_playerRadius"
-            ),
-            showBorder: gl.getUniformLocation(program, "u_showBorder"),
-        };
-    }
 
     createShader(gl, type, source) {
 
@@ -276,12 +234,16 @@ export class Renderer {
             gl.deleteShader(fragmentShader);
 
             throw new Error(error);
-        }
+        };
 
         gl.deleteShader(vertexShader);
         gl.deleteShader(fragmentShader);
 
-        return program;
+        return {
+            program,
+            attributes: {},
+            uniforms:{}
+        };
     }
 
 
@@ -360,85 +322,48 @@ export class Renderer {
     }
 
 
-    uploadDitheringSettings(settings) {
+    uploadShaderSettings(settings, shader) {
 
         const gl = this.gl;
-        const uniforms = this.ditheringUniforms;
 
-        gl.useProgram(this.program);
+        for (const attribute of settings.attributes) {
+            shader.attributes[attribute] =
+                gl.getAttribLocation(shader.program, attribute);
+        }
 
-        gl.uniform1i(
-            uniforms.matrixSize,
-            settings.matrixSize
-        );
+        for (const [name, config] of Object.entries(settings.uniforms)) {
 
-        gl.uniform1fv(
-            uniforms.bayerMatrix,
-            new Float32Array(settings.bayerMatrix)
-        );
+            shader.uniforms[name] = {
+                location: gl.getUniformLocation(shader.program, name),
+                type: config.type
+            };
 
-        gl.uniform3fv(
-            uniforms.palette,
-            new Float32Array(
-                settings.palette.flat().map(value => value / 255)
-            )
-        );
-
-        gl.uniform1fv(
-            uniforms.cutoffs,
-            new Float32Array(settings.cutoffs)
-        );
-
-        gl.uniform1f(
-            uniforms.cutoffStrength,
-            settings.cutoffStrength
-        );
+            if (config.value !== undefined) {
+                this.uploadUniforms(shader, {
+                    [name]: config.value
+                });
+            }
+        }
     }
 
 
-    uploadCameraSettings(camera) {
+    uploadUniforms(program, values) {
 
         const gl = this.gl;
-        const uniforms = this.ditheringUniforms;
 
-        gl.uniform2f(
-            uniforms.cameraPosition,
-            camera.x,
-            camera.y
-        );
+        gl.useProgram(program.program);
 
-        gl.uniform1f(
-            uniforms.zoom,
-            camera.zoom
-        );
-    }
+        for (const [name, value] of Object.entries(values)) {
 
+            const uniform = program.uniforms[name];
 
-    uploadBackgroundSettings(background) {
+            if (!uniform || uniform.location === null) continue;
 
-        const gl = this.gl;
-        const uniforms = this.ditheringUniforms;
-
-        gl.uniform2f(
-            uniforms.backgroundPosition,
-            background.x,
-            background.y
-        );
-
-        gl.uniform2f(
-            uniforms.backgroundSize,
-            background.width,
-            background.height
-        );
-
-    }
-
-
-    uploadWorldDithering(){
-        this.gl.uniform1i(
-            this.ditheringUniforms.worldDithering,
-            this.worldDithering? 1: 0
-        );
+            gl[`uniform${uniform.type}`](
+                uniform.location,
+                value
+            );
+        }
     }
 
 
@@ -464,7 +389,7 @@ export class Renderer {
             0,
             gl.RGBA,
             gl.UNSIGNED_BYTE,
-            new Uint8Array([10, 10, 10, 255])
+            new Uint8Array([0,0,0,255])
         );
 
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
@@ -474,9 +399,55 @@ export class Renderer {
     }
 
 
+    renderQuad(shader, vertices) {
+
+        const gl = this.gl;
+
+        gl.useProgram(shader.program);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+
+        gl.bufferData(
+            gl.ARRAY_BUFFER,
+            vertices,
+            gl.DYNAMIC_DRAW
+        );
+
+        const position = shader.attributes.a_position;
+        const texCoord = shader.attributes.a_texCoord;
+
+        gl.enableVertexAttribArray(position);
+        gl.vertexAttribPointer(
+            position, 2, gl.FLOAT, false, 16, 0
+        );
+
+        gl.enableVertexAttribArray(texCoord);
+        gl.vertexAttribPointer(
+            texCoord, 2, gl.FLOAT, false, 16, 8
+        );
+
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+    }
+
+
+    createQuadVertices(left, top, right, bottom) {
+
+        return new Float32Array([
+            left,  top,       0, 1,
+            right, top,       1, 1,
+            left,  bottom,    0, 0,
+
+            left,  bottom,    0, 0,
+            right, top,       1, 1,
+            right, bottom,    1, 0
+        ]);
+    }
+
+
     renderSprite(sprite, camera = null) {
 
         const gl = this.gl;
+        const shader = this.ditheringProgram;
 
         if (!sprite.texture) return;
 
@@ -492,186 +463,40 @@ export class Renderer {
         const left = position.x - width / 2;
         const top = position.y - height / 2;
 
-        const right = left + width;
-        const bottom = top + height;
-
-        const vertices = new Float32Array([
-
-            left,  top,       0, 1,
-            right, top,       1, 1,
-            left,  bottom,    0, 0,
-
-            left,  bottom,    0, 0,
-            right, top,       1, 1,
-            right, bottom,    1, 0
-        ]);
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            vertices,
-            gl.DYNAMIC_DRAW
+        const vertices = this.createQuadVertices(
+            left,
+            top,
+            left + width,
+            top + height
         );
 
-        gl.enableVertexAttribArray(this.positionLocation);
-
-        gl.vertexAttribPointer(
-            this.positionLocation,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            0
-        );
-
-        gl.enableVertexAttribArray(this.texCoordLocation);
-
-        gl.vertexAttribPointer(
-            this.texCoordLocation,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            8
-        );
+        this.uploadUniforms(shader, {
+            u_resolution: [this.canvas.width, this.canvas.height],
+            u_texture: 0
+        });
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, sprite.texture);
 
-        gl.uniform1i(this.textureLocation, 0);
-
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
-    }
-
-
-    renderShape(shape, camera, shader, color) {
-
-        const gl = this.gl;
-
-        const position = camera
-            ? camera.worldToScreen(shape.x, shape.y)
-            : { x: shape.x, y: shape.y };
-
-        const zoom = camera ? camera.zoom : 1;
-
-        const width = shape.width * zoom;
-        const height = shape.height * zoom;
-
-        const left = position.x - width / 2;
-        const top = position.y - height / 2;
-
-        const right = left + width;
-        const bottom = top + height;
-
-        const vertices = new Float32Array([
-            left,  top,       0, 1,
-            right, top,       1, 1,
-            left,  bottom,    0, 0,
-
-            left,  bottom,    0, 0,
-            right, top,       1, 1,
-            right, bottom,    1, 0
-        ]);
-
-        gl.useProgram(shader.program);
-        gl.uniform2f(
-            shader.resolution,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            vertices,
-            gl.DYNAMIC_DRAW
-        );
-
-        gl.enableVertexAttribArray(shader.position);
-
-        gl.vertexAttribPointer(
-            shader.position,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            0
-        );
-
-        gl.enableVertexAttribArray(shader.texCoord);
-
-        gl.vertexAttribPointer(
-            shader.texCoord,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            8
-        );
-
-        // Object dimensions in screen pixels
-        gl.uniform2f(
-            shader.size,
-            width,
-            height
-        );
-
-        // Object color
-        gl.uniform4fv(
-            shader.color,
-            color
-        );
-        if (shader === this.orbProgram) {
-
-            gl.uniform1i(
-                shader.active,
-                shape.inRange ? 1 : 0
-            );
-
-            gl.uniform1f(
-                shader.alignment,
-                shape.alignment
-            );
-
-            gl.uniform1f(
-                shader.spinAngle,
-                shape.spinAngle
-            );
-        }
-
-        // Animation time, if supported by shader
-        if (shader.time !== null) {
-            gl.uniform1f(
-                shader.time,
-                performance.now() * 0.001
-            );
-        }
-
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        this.renderQuad(shader, vertices);
     }
 
 
     renderPlayer(player, camera) {
 
-        const gl = this.gl;
         const shader = this.playerProgram;
 
-        // Player position in screen coordinates
         const position = camera
             ? camera.worldToScreen(player.x, player.y)
             : { x: player.x, y: player.y };
 
         const zoom = camera ? camera.zoom : 1;
 
-        // Player's visual radius in screen pixels
         const radius = Math.min(
             player.width,
             player.height
         ) * zoom * 0.42;
 
-        // Screen center
         const centerX = this.canvas.width / 2;
         const centerY = this.canvas.height / 2;
 
@@ -680,14 +505,12 @@ export class Renderer {
             y: centerY
         };
 
-        // Calculate triangle in screen space
         const tail = calculateTangentPoints(
             position,
             radius,
             center
         );
 
-        // Smallest bounding box containing player and screen center
         const left = Math.min(position.x - radius, centerX);
         const right = Math.max(position.x + radius, centerX);
 
@@ -697,144 +520,54 @@ export class Renderer {
         const width = right - left;
         const height = bottom - top;
 
-        // Player position relative to the quad (UV coordinates)
-        const playerLocalPosition = [
-            (position.x - left) / width,
-            1.0 - (position.y - top) / height
-        ];
-
-        // Screen center relative to the quad (UV coordinates)
-        const centerLocalPosition = [
-            (centerX - left) / width,
-            1.0 - (centerY - top) / height
-        ];
-
         const toLocal = (point) => [
             (point.x - left) / width,
             1.0 - (point.y - top) / height
         ];
 
+        const playerLocalPosition = toLocal(position);
+        const centerLocalPosition = toLocal(center);
+
         const tailA = tail ? toLocal(tail.a) : centerLocalPosition;
         const tailB = tail ? toLocal(tail.b) : centerLocalPosition;
-        const tailC = centerLocalPosition;
 
-        // Quad vertices
-        const vertices = new Float32Array([
-            left,  top,       0, 1,
-            right, top,       1, 1,
-            left,  bottom,    0, 0,
-
-            left,  bottom,    0, 0,
-            right, top,       1, 1,
-            right, bottom,    1, 0
-        ]);
-
-        gl.useProgram(shader.program);
-
-        // Canvas resolution
-        gl.uniform2f(
-            shader.resolution,
-            this.canvas.width,
-            this.canvas.height
+        const vertices = this.createQuadVertices(
+            left,
+            top,
+            right,
+            bottom
         );
 
-        // Dimensions of the bounding box
-        gl.uniform2f(
-            shader.size,
-            width,
-            height
-        );
+        const speed = Math.hypot(player.vx, player.vy);
 
-        // Player position inside the bounding box
-        gl.uniform2fv(
-            shader.playerPosition,
-            playerLocalPosition
-        );
+        this.uploadUniforms(shader, {
+            u_resolution: [this.canvas.width, this.canvas.height],
+            u_size: [width, height],
+            u_color: [1.0, 1.0, 1.0, 1.0],
 
-        // Screen center inside the bounding box
-        gl.uniform2fv(
-            shader.centerPosition,
-            centerLocalPosition
-        );
+            u_playerPosition: playerLocalPosition,
+            u_centerPosition: centerLocalPosition,
 
-        // Player radius
-        gl.uniform1f(
-            shader.playerRadius,
-            radius
-        );
-        gl.uniform1f(
-            shader.zoom,
-            camera ? camera.zoom : 1.0
-        );
+            u_playerRadius: radius,
+            u_rippleDistance: player.rippleDistance,
+            u_zoom: zoom,
 
-        gl.uniform1f(shader.playerRadius, radius);
-        gl.uniform1i(shader.showBorder, player.showBorder ? 1 : 0);
+            u_tailA: tailA,
+            u_tailB: tailB,
+            u_tailC: centerLocalPosition,
 
-        gl.uniform4fv(
-            shader.color,
-            [1.0, 1.0, 1.0, 1.0]
-        );
+            u_hasTail: tail ? 1 : 0,
+            u_speed: speed,
+            u_time: performance.now() * 0.001,
+            u_showBorder: player.showBorder ? 1 : 0
+        });
 
-        gl.uniform2fv(shader.tailA, tailA);
-        gl.uniform2fv(shader.tailB, tailB);
-        gl.uniform2fv(shader.tailC, tailC);
-
-        gl.uniform1i(
-            shader.hasTail,
-            tail ? 1 : 0
-        );
-        const speed = Math.hypot(
-            player.vx,
-            player.vy
-        );
-
-        gl.uniform1f(shader.speed, speed);
-
-        if (shader.time !== null) {
-            gl.uniform1f(
-                shader.time,
-                performance.now() * 0.001
-            );
-        }
-
-        // Upload geometry
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
-
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            vertices,
-            gl.DYNAMIC_DRAW
-        );
-
-        gl.enableVertexAttribArray(shader.position);
-
-        gl.vertexAttribPointer(
-            shader.position,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            0
-        );
-
-        gl.enableVertexAttribArray(shader.texCoord);
-
-        gl.vertexAttribPointer(
-            shader.texCoord,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            8
-        );
-
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        this.renderQuad(shader, vertices);
     }
 
 
     renderFilament(player, orb, camera) {
 
-        const gl = this.gl;
         const shader = this.filamentProgram;
 
         const start = camera
@@ -863,83 +596,104 @@ export class Renderer {
             point.y - top
         ];
 
-        const vertices = new Float32Array([
-            left,  top,       0, 1,
-            right, top,       1, 1,
-            left,  bottom,    0, 0,
+        const vertices = this.createQuadVertices(
+            left,
+            top,
+            right,
+            bottom
+        );
 
-            left,  bottom,    0, 0,
-            right, top,       1, 1,
-            right, bottom,    1, 0
-        ]);
+        this.uploadUniforms(shader, {
+            u_resolution: [this.canvas.width, this.canvas.height],
+            u_size: [width, height],
 
-        gl.useProgram(shader.program);
+            u_start: localPosition(start),
+            u_end: localPosition(end),
 
-        gl.uniform2f(
-            shader.resolution,
+            u_zoom: zoom,
+            u_time: performance.now() * 0.001,
+
+            u_color: [0.45, 0.75, 1.0, 1.0]
+        });
+
+        this.renderQuad(shader, vertices);
+    }
+
+
+    renderOrb(orb, camera) {
+
+        const shader = this.orbProgram;
+
+        const position = camera
+            ? camera.worldToScreen(orb.x, orb.y)
+            : { x: orb.x, y: orb.y };
+
+        const zoom = camera ? camera.zoom : 1;
+
+        const width = orb.width * zoom;
+        const height = orb.height * zoom;
+
+        const left = position.x - width / 2;
+        const top = position.y - height / 2;
+
+        const vertices = this.createQuadVertices(
+            left,
+            top,
+            left + width,
+            top + height
+        );
+
+        this.uploadUniforms(shader, {
+            u_resolution: [this.canvas.width, this.canvas.height],
+            u_size: [width, height],
+            u_color: [0.8, 0.85, 0.9, 1.0],
+
+            u_time: performance.now() * 0.001,
+            u_zoom: zoom,
+
+            u_active: orb.inRange ? 1 : 0,
+            u_alignment: orb.alignment,
+            u_spinAngle: orb.spinAngle
+        });
+
+        this.renderQuad(shader, vertices);
+    }
+
+
+    renderDithering() {
+
+        const gl = this.gl;
+
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
+        gl.viewport(
+            0,
+            0,
             this.canvas.width,
             this.canvas.height
         );
 
-        gl.uniform2f(
-            shader.size,
-            width,
-            height
-        );
+        gl.disable(gl.BLEND);
 
-        gl.uniform2fv(
-            shader.start,
-            localPosition(start)
-        );
+        gl.clearColor(0, 0, 0, 1);
+        gl.clear(gl.COLOR_BUFFER_BIT);
 
-        gl.uniform2fv(
-            shader.end,
-            localPosition(end)
-        );
+        this.uploadUniforms(this.ditheringProgram, {
 
-        gl.uniform1f(shader.zoom, zoom);
+            u_ditheringEnabled: this.ditheringEnabled ? 1 : 0
 
-        gl.uniform1f(
-            shader.time,
-            performance.now() * 0.001
-        );
+        });
 
-        gl.uniform4fv(
-            shader.color,
-            [0.45, 0.75, 1.0, 1.0]
-        );
+        this.renderSprite({
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2,
 
-        gl.bufferData(
-            gl.ARRAY_BUFFER,
-            vertices,
-            gl.DYNAMIC_DRAW
-        );
+            width: this.canvas.width,
+            height: this.canvas.height,
 
-        gl.enableVertexAttribArray(shader.position);
-
-        gl.vertexAttribPointer(
-            shader.position,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            0
-        );
-
-        gl.enableVertexAttribArray(shader.texCoord);
-
-        gl.vertexAttribPointer(
-            shader.texCoord,
-            2,
-            gl.FLOAT,
-            false,
-            16,
-            8
-        );
-
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+            texture: this.sceneTexture
+        });
     }
 
 
@@ -952,7 +706,6 @@ export class Renderer {
         const width = Math.round(rect.width);
         const height = Math.round(rect.height);
 
-        // Resize framebuffer if client dimensions changed
         if (
             this.sceneWidth !== width ||
             this.sceneHeight !== height
@@ -960,12 +713,6 @@ export class Renderer {
             this.resizeSceneFramebuffer();
         }
 
-        
-
-
-        // ============================================================
-        // PASS 1: RENDER SCENE
-        // ============================================================
 
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFramebuffer);
 
@@ -982,23 +729,30 @@ export class Renderer {
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        gl.useProgram(this.program);
-        gl.uniform1i(this.ditheringUniforms.enabled, 0);
 
-        gl.uniform2f(
-            this.resolutionLocation,
-            this.canvas.width,
-            this.canvas.height
-        );
+        this.uploadUniforms(this.ditheringProgram, {
+            u_ditheringEnabled: 0
+        });
 
-        this.uploadCameraSettings(camera);
+        // Upload world-space dithering information
+        this.uploadUniforms(this.ditheringProgram, {
 
-        this.uploadBackgroundSettings(level.background);
-        
-        this.uploadWorldDithering();
+            u_cameraPosition: [camera.x, camera.y],
+            u_zoom: camera.zoom,
 
+            u_backgroundPosition: [
+                level.background.x,
+                level.background.y
+            ],
 
-        // Background
+            u_backgroundSize: [
+                level.background.width,
+                level.background.height
+            ],
+
+            u_worldDithering: this.worldDithering ? 1 : 0
+        });
+
         this.renderSprite({
             x: this.canvas.width / 2,
             y: this.canvas.height / 2,
@@ -1007,29 +761,15 @@ export class Renderer {
             texture: this.darkTexture
         });
 
-
-        
-
-        // Background
         this.renderSprite(level.background, camera);
-        
-        
 
-        // Orbs
         for (const orb of level.orbs) {
-
-            this.renderShape(
-                orb,
-                camera,
-                this.orbProgram,
-                [0.8, 0.85, 0.9, 1.0]
-            );
+            this.renderOrb(orb, camera);
         }
 
         this.renderPlayer(player, camera);
-        // Filament connection
-        if (player.engaged && player.engagedOrb) {
 
+        if (player.engaged && player.engagedOrb) {
             this.renderFilament(
                 player,
                 player.engagedOrb,
@@ -1037,50 +777,9 @@ export class Renderer {
             );
         }
 
-
-        
-
-        // ============================================================
-        // PASS 2: DITHER FRAMEBUFFER
-        // ============================================================
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-        gl.viewport(
-            0,
-            0,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-        gl.disable(gl.BLEND);
-
-        gl.clearColor(0, 0, 0, 1);
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-        gl.useProgram(this.program);
-
-        gl.uniform2f(
-            this.resolutionLocation,
-            this.canvas.width,
-            this.canvas.height
-        );
-
-        gl.uniform1i(
-            this.ditheringUniforms.enabled,
-            this.ditheringEnabled ? 1 : 0
-        );
-
-
-        // Draw framebuffer texture across entire screen
-        this.renderSprite({
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
-            width: this.canvas.width,
-            height: this.canvas.height,
-            texture: this.sceneTexture
-        });
+        this.renderDithering();
     }
 
 
 }
+

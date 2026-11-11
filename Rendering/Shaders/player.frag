@@ -12,6 +12,7 @@ uniform bool u_showBorder;
 uniform vec4 u_color;
 
 uniform vec2 u_tailA;
+uniform float u_rippleDistance;
 uniform vec2 u_tailB;
 uniform vec2 u_tailC;
 uniform bool u_hasTail;
@@ -103,18 +104,18 @@ void main() {
     // BOUNDING BOX OUTLINE
     // ============================================================
 
+    float edgeThickness = 3.0 ;
+
     float boxEdge = 0.0;
 
     if (u_showBorder) {
+        vec2 pixel = v_texCoord * u_size;
 
-        float edgeThickness = 2.0;
-
-        boxEdge = 1.0 - step(
-            edgeThickness,
-            min(
-                min(v_texCoord.x * u_size.x, (1.0 - v_texCoord.x) * u_size.x),
-                min(v_texCoord.y * u_size.y, (1.0 - v_texCoord.y) * u_size.y)
-            )
+        boxEdge = float(
+            pixel.x < edgeThickness ||
+            pixel.y < edgeThickness ||
+            pixel.x >= u_size.x - edgeThickness ||
+            pixel.y >= u_size.y - edgeThickness
         );
     }
 
@@ -136,36 +137,41 @@ void main() {
     // ============================================================
     // COMBINED ALPHA
     // ============================================================
-
+    /*
     float alpha = max(
         max(playerAlpha, boxEdge),
         centerMarker
+    );
+    */
+    float alpha = max(
+        playerAlpha, 
+        boxEdge
     );
 
     // ============================================================
     // CONTOUR-FOLLOWING RIPPLES
     // ============================================================
 
-    float rippleSpacing = 20.0;
+    float rippleSpacing = 30.0;
 
    
 
 
     // Propagation speed proportional to player displacement
-    float rippleSpeed = 1.0 * 0.005;
+    float rippleSpeed = u_speed * 0.008;
 
     // Convert SDF distance into world-space distance
     float r = playerSDF / max(u_zoom, 0.001);
 
     // Animate ripples outward
     float wave = 0.5 + 0.5 * cos(
-        (r - u_time * rippleSpeed)
+        (r -  u_rippleDistance)
         * 6.28318530718 / rippleSpacing
     );
 
     float brightness = mix(
-        0.15,
-        0.85,
+        0.35,
+        0.75,
         wave
     );
 
@@ -173,6 +179,14 @@ void main() {
     // ============================================================
     // OUTPUT
     // ============================================================
+    float greyval = 0.5;
+    vec3 borderColor = vec3(greyval);
 
-    outColor = vec4(vec3(brightness), alpha);
+    vec3 finalColor = mix(
+        vec3(brightness),
+        borderColor,
+        boxEdge
+    );
+
+    outColor = vec4(finalColor, alpha);
 }

@@ -4,10 +4,11 @@ export class Physics {
     constructor() {
         this.orb_capture_distance = null;
         this.engagedOrb = null;
-        this.springCaptureMultiplier = 0.4;
+        this.springCaptureMultiplier = 0.2;
         this.springStiffness = 4000;
-        this.tangentialOrbForce = 90000;
-        this.springDamping = 3000;
+        this.tangentialOrbForce = 40000;
+        this.springDamping = 2000;
+
     }
 
     calculateOrbForce(player, orb) {
@@ -44,7 +45,7 @@ export class Physics {
         const radialForce = spring - damper;
 
         const tangentialMultiplier = Math.min(
-            1.0 / (distance**2)*10000,
+            1.0 / (distance**2)*100000,
             3
         );
         console.log("distance ratio:", this.orb_capture_distance / distance);
@@ -169,6 +170,9 @@ export class Physics {
 
         player.vx += player.ax * dt;
         player.vy += player.ay * dt;
+        player.speed = Math.hypot(player.vx, player.vy);
+
+        player.rippleDistance += player.speed/20 * dt;
 
         // calculate direction of motion
         player.direction = Math.atan2(player.vy, player.vx);
