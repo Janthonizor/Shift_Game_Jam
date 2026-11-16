@@ -17,13 +17,15 @@ async function loadShader(path) {
 
 const [
     vertexShaderSource,
-    fragmentShaderSource,
+    ditheringShaderSource,
+    backgroundShaderSource,
     playerShaderSource,
     orbShaderSource,
     filamentShaderSource
 ] = await Promise.all([
     loadShader(new URL("./Shaders/vertex.vert", import.meta.url)),
     loadShader(new URL("./Shaders/dithering.frag", import.meta.url)),
+    loadShader(new URL("./Shaders/background.frag", import.meta.url)),
     loadShader(new URL("./Shaders/player.frag", import.meta.url)),
     loadShader(new URL("./Shaders/orb.frag", import.meta.url)),
     loadShader(new URL("./Shaders/filament.frag", import.meta.url))
@@ -54,7 +56,13 @@ export class Renderer {
         this.ditheringProgram = this.createProgram(
             gl,
             vertexShaderSource,
-            fragmentShaderSource
+            ditheringShaderSource
+        );
+
+        this.backgroundProgram = this.createProgram(
+            gl,
+            vertexShaderSource,
+            backgroundShaderSource
         );
 
         this.playerProgram = this.createProgram(
@@ -167,6 +175,28 @@ export class Renderer {
             }
         };
 
+        this.backgroundSettings = {
+
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
+
+            uniforms: {
+                u_resolution:         { type: "2fv" },
+                u_texture:            { type: "1i" },
+
+                u_cameraPosition:     { type: "2fv" },
+                u_zoom:               { type: "1f" },
+
+                u_backgroundPosition: { type: "2fv" },
+                u_backgroundSize:     { type: "2fv" },
+
+                u_compression:        { type: "1f" },
+                u_viewRadius:         { type: "1f" }
+            }
+        };
+
         this.ditheringSettings = {
 
             attributes: [
@@ -175,32 +205,42 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_resolution:          { type: "2fv" },
-                u_texture:             { type: "1i" },
-                u_ditheringEnabled:    { type: "1i" },
+                u_resolution:        { type: "2fv" },
+                u_texture:          { type: "1i" },
+                u_ditheringEnabled: { type: "1i" },
 
-                u_matrixSize:          { type: "1i", value: this.ditherObject.matrixSize },
-                "u_bayerMatrix[0]":    { type: "1fv", value: new Float32Array(this.ditherObject.bayerMatrix) },
-                "u_palette[0]":        { type: "3fv", value: new Float32Array(this.ditherObject.palette.flat().map(value => value / 255)) },
-                "u_cutoffs[0]":        { type: "1fv", value: new Float32Array(this.ditherObject.cutoffs) },
-                u_cutoffStrength:      { type: "1f", value: this.ditherObject.cutoffStrength },
+                u_matrixSize:       { type: "1i", value: this.ditherObject.matrixSize },
 
-                u_worldDithering:      { type: "1i" },
-                u_backgroundPosition:  { type: "2fv" },
-                u_backgroundSize:      { type: "2fv" },
-                u_ditherScale:          { type: "1f" },
+                "u_bayerMatrix[0]": {
+                    type: "1fv",
+                    value: new Float32Array(this.ditherObject.bayerMatrix)
+                },
 
-                u_cameraPosition:      { type: "2fv" },
-                u_zoom:                { type: "1f" },
-                u_cameraProjection: { type: "1i" },
-                u_compression:      { type: "1f" },
-                u_viewRadius:       { type: "1f" },
+                "u_palette[0]": {
+                    type: "3fv",
+                    value: new Float32Array(
+                        this.ditherObject.palette.flat().map(value => value / 255)
+                    )
+                },
+
+                "u_cutoffs[0]": {
+                    type: "1fv",
+                    value: new Float32Array(this.ditherObject.cutoffs)
+                },
+
+                u_cutoffStrength: {
+                    type: "1f",
+                    value: this.ditherObject.cutoffStrength
+                },
+
+                u_ditherScale: { type: "1f" }
             }
         };
 
         this.uploadShaderSettings(this.playerSettings, this.playerProgram);
         this.uploadShaderSettings(this.orbSettings, this.orbProgram);
         this.uploadShaderSettings(this.filamentSettings, this.filamentProgram);
+        this.uploadShaderSettings(this.backgroundSettings, this.backgroundProgram);
         this.uploadShaderSettings(this.ditheringSettings, this.ditheringProgram);
 
 
@@ -478,47 +518,28 @@ export class Renderer {
     }
 
 
-
     renderSprite(sprite, camera = null) {
 
         const gl = this.gl;
-        const shader = this.ditheringProgram;
+        const shader = this.backgroundProgram;
 
         if (!sprite.texture) return;
 
-        let left, top, width, height;
-
-        if (camera) {
-
-            left = 0;
-            top = 0;
-
-            width = this.canvas.width;
-            height = this.canvas.height;
-
-        } else {
-
-            width = sprite.width;
-            height = sprite.height;
-
-            left = sprite.x - width / 2;
-            top = sprite.y - height / 2;
-
-        }
-
         const vertices = this.createQuadVertices(
-            left,
-            top,
-            left + width,
-            top + height
+            0,
+            0,
+            this.canvas.width,
+            this.canvas.height
         );
 
         this.uploadUniforms(shader, {
 
-            u_resolution: [this.canvas.width, this.canvas.height],
-            u_texture: 0,
+            u_resolution: [
+                this.canvas.width,
+                this.canvas.height
+            ],
 
-            u_cameraProjection: camera ? 1 : 0,
+            u_texture: 0,
 
             u_cameraPosition: camera
                 ? [camera.x, camera.y]
@@ -530,18 +551,23 @@ export class Renderer {
 
             u_viewRadius: camera ? camera.viewRadius : 1,
 
-            u_backgroundPosition: [sprite.x, sprite.y],
+            u_backgroundPosition: [
+                sprite.x,
+                sprite.y
+            ],
 
-            u_backgroundSize: [sprite.width, sprite.height]
-
+            u_backgroundSize: [
+                sprite.width,
+                sprite.height
+            ]
         });
 
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, sprite.texture);
 
         this.renderQuad(shader, vertices);
-
     }
+
 
 
     renderPlayer(player, camera) {
@@ -840,7 +866,7 @@ export class Renderer {
     }
 
 
-    renderDithering(level, camera) {
+    renderDithering() {
 
         const gl = this.gl;
         const shader = this.ditheringProgram;
@@ -883,33 +909,8 @@ export class Renderer {
             u_texture: 0,
 
             u_ditheringEnabled: this.ditheringEnabled ? 1 : 0,
-            u_ditherScale: 1.0,
 
-            u_worldDithering: this.worldDithering ? 1 : 0,
-
-            // The scene is already camera-projected.
-            // Do not apply the camera projection again.
-            u_cameraProjection: 0,
-
-            // Preserve camera information for dithering.
-            u_cameraPosition: [
-                camera.x,
-                camera.y
-            ],
-
-            u_zoom: camera.zoom,
-            u_compression: camera.compression,
-            u_viewRadius: camera.viewRadius,
-
-            u_backgroundPosition: [
-                level.background.x,
-                level.background.y
-            ],
-
-            u_backgroundSize: [
-                level.background.width,
-                level.background.height
-            ]
+            u_ditherScale: 0.75
 
         });
 
@@ -950,20 +951,6 @@ export class Renderer {
         gl.clearColor(0, 0, 0, 1);
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-
-        this.uploadUniforms(this.ditheringProgram, {
-            u_ditheringEnabled: 0
-        });
-
-
-        this.renderSprite({
-            x: this.canvas.width / 2,
-            y: this.canvas.height / 2,
-            width: this.canvas.width,
-            height: this.canvas.height,
-            texture: this.darkTexture
-        });
-
         this.renderSprite(level.background, camera);
 
         for (const orb of level.orbs) {
@@ -980,8 +967,8 @@ export class Renderer {
             );
         }
 
-        this.renderDithering(level, camera);
- 
+        this.renderDithering();
+
         console.table({
             iframeWidth: window.innerWidth,
             iframeHeight: window.innerHeight,
@@ -994,6 +981,7 @@ export class Renderer {
 
             devicePixelRatio: window.devicePixelRatio
         });
+
 
     }
 

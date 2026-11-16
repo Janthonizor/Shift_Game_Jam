@@ -21,7 +21,7 @@ export class Game {
             height: 128,
 
             mass: 150,
-            moveForce: 4000,
+            moveForce: 100,
             drag: 25,
             bounciness: 0.9,
 
@@ -42,7 +42,7 @@ export class Game {
             engagedOrb: null,
 
             rippleDistance: 0,
-            showBorder: false,
+            showBorder: true,
         };
 
         this.player.speed = Math.hypot(this.player.vx, this.player.vy);
