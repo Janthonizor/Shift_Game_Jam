@@ -4,25 +4,33 @@ precision highp float;
 
 in vec2 v_texCoord;
 
-uniform vec2 u_size;
+uniform vec2 u_resolution;
+
+uniform vec2 u_cameraPosition;
 uniform vec2 u_playerPosition;
-uniform vec2 u_centerPosition;
-uniform float u_playerRadius;
-uniform bool u_showBorder;
-uniform vec4 u_color;
 
 uniform vec2 u_tailA;
-uniform float u_rippleDistance;
 uniform vec2 u_tailB;
 uniform vec2 u_tailC;
-uniform bool u_hasTail;
-uniform float u_time;
-uniform float u_speed;
+
 uniform float u_zoom;
+uniform float u_compression;
+uniform float u_viewRadius;
+
+uniform float u_playerRadius;
+uniform float u_rippleDistance;
+
+uniform vec4 u_color;
+
+uniform bool u_radialProjection;
+uniform bool u_hasTail;
 
 out vec4 outColor;
 
 
+// ============================================================
+// LINE SDF
+// ============================================================
 
 float sdLine(vec2 p, vec2 a, vec2 b, vec2 insidePoint) {
 
@@ -42,44 +50,129 @@ float sdLine(vec2 p, vec2 a, vec2 b, vec2 insidePoint) {
 }
 
 
+// ============================================================
+// INVERSE CAMERA PROJECTION
+// ============================================================
+
+vec2 screenToWorld(vec2 screenPosition) {
+
+    vec2 screenDelta =
+        screenPosition - u_resolution * 0.5;
+
+    float screenRadius = length(screenDelta);
+
+    // Linear camera projection.
+    if (!u_radialProjection) {
+
+        return u_cameraPosition +
+            screenDelta / max(u_zoom, 0.001);
+    }
+
+    // Radial camera projection.
+    float normalizedRadius =
+        screenRadius / u_viewRadius;
+
+    // Projection asymptote.
+    if (normalizedRadius >= 1.0) {
+        return vec2(1e20);
+    }
+
+    float worldDistance =
+        u_compression * normalizedRadius /
+        (u_zoom * (1.0 - normalizedRadius));
+
+    vec2 worldPosition = u_cameraPosition;
+
+    if (screenRadius > 0.0001) {
+
+        worldPosition +=
+            screenDelta / screenRadius * worldDistance;
+    }
+
+    return worldPosition;
+}
+
+
+// ============================================================
+// MAIN
+// ============================================================
+
 void main() {
 
-   
+    // ========================================================
+    // SCREEN TO WORLD
+    // ========================================================
 
-    vec2 pixelPosition = v_texCoord * u_size;
-    vec2 playerPixelPosition = u_playerPosition * u_size;
+    // gl_FragCoord has a bottom-left origin.
+    // Convert to the top-left screen coordinates used by Camera.
 
-    vec2 p = pixelPosition - playerPixelPosition;
+    vec2 screenPosition = vec2(
+        gl_FragCoord.x,
+        u_resolution.y - gl_FragCoord.y
+    );
+
+    vec2 worldPosition = screenToWorld(screenPosition);
+
+    // Discard fragments outside the radial projection.
+    if (worldPosition.x > 1e19) {
+        discard;
+    }
 
 
-    float circleSDF = length(p) - u_playerRadius;
+    // ========================================================
+    // PLAYER GEOMETRY
+    // ========================================================
+
+    // Everything from this point onward is world-space.
+
+    vec2 p = worldPosition - u_playerPosition;
+
+    float circleSDF =
+        length(p) - u_playerRadius;
 
     float playerSDF = circleSDF;
 
+
+    // ========================================================
+    // PLAYER TAIL
+    // ========================================================
+
     if (u_hasTail) {
 
-        vec2 tailA = (u_tailA - u_playerPosition) * u_size;
-        vec2 tailB = (u_tailB - u_playerPosition) * u_size;
-        vec2 tailC = (u_tailC - u_playerPosition) * u_size;
+        // Tail coordinates relative to player center.
+        vec2 tailA = u_tailA - u_playerPosition;
+        vec2 tailB = u_tailB - u_playerPosition;
+        vec2 tailC = u_tailC - u_playerPosition;
 
 
-        // Orient the two tail boundaries toward the center point.
-        float lineAC = sdLine(p, tailA, tailC, vec2(0.0));
-        float lineBC = sdLine(p, tailB, tailC, vec2(0.0));
-        float lineAO = sdLine(p, tailA, vec2(0.0), tailC);
-        float lineBO = sdLine(p, tailB, vec2(0.0), tailC);
+        // Tail boundaries.
+        float lineAC = sdLine(
+            p, tailA, tailC, vec2(0.0)
+        );
 
-        // Tail wedge: inside both lines and in front of the player.
+        float lineBC = sdLine(
+            p, tailB, tailC, vec2(0.0)
+        );
+
+        float lineAO = sdLine(
+            p, tailA, vec2(0.0), tailC
+        );
+
+        float lineBO = sdLine(
+            p, tailB, vec2(0.0), tailC
+        );
+
+
+        // Tail wedge.
         float tailSDF = max(lineAC, lineBC);
 
-        // Is the pixel inside the wedge?
         bool insideTail =
             lineAC <= 0.0 &&
             lineBC <= 0.0 &&
-            lineAO <= 0.0 && 
+            lineAO <= 0.0 &&
             lineBO <= 0.0;
 
-        // Select the appropriate SDF.
+
         if (insideTail) {
             playerSDF = tailSDF;
         }
@@ -89,9 +182,9 @@ void main() {
     }
 
 
-    // ============================================================
+    // ========================================================
     // PLAYER ALPHA
-    // ============================================================
+    // ========================================================
 
     float playerAlpha = 1.0 - smoothstep(
         -1.0,
@@ -100,93 +193,34 @@ void main() {
     );
 
 
-    // ============================================================
-    // BOUNDING BOX OUTLINE
-    // ============================================================
-
-    float edgeThickness = 3.0 ;
-
-    float boxEdge = 0.0;
-
-    if (u_showBorder) {
-        vec2 pixel = v_texCoord * u_size;
-
-        boxEdge = float(
-            pixel.x < edgeThickness ||
-            pixel.y < edgeThickness ||
-            pixel.x >= u_size.x - edgeThickness ||
-            pixel.y >= u_size.y - edgeThickness
-        );
-    }
-
-
-    // ============================================================
-    // CENTER MARKER
-    // ============================================================
-
-    vec2 centerOffset =
-        (v_texCoord - u_centerPosition) * u_size;
-
-    float centerMarker = 1.0 - smoothstep(
-        1.5,
-        2.5,
-        length(centerOffset)
-    );
-
-
-    // ============================================================
-    // COMBINED ALPHA
-    // ============================================================
-    /*
-    float alpha = max(
-        max(playerAlpha, boxEdge),
-        centerMarker
-    );
-    */
-    float alpha = max(
-        playerAlpha, 
-        boxEdge
-    );
-
-    // ============================================================
+    // ========================================================
     // CONTOUR-FOLLOWING RIPPLES
-    // ============================================================
+    // ========================================================
 
-    float rippleSpacing = 30.0;
+    // The SDF is already in world-space units.
+    float worldDistance = playerSDF;
 
-   
+    // Fixed world-space ripple spacing.
+    float rippleSpacing = u_playerRadius * 0.5;
 
-
-    // Propagation speed proportional to player displacement
-    float rippleSpeed = u_speed * 0.008;
-
-    // Convert SDF distance into world-space distance
-    float r = playerSDF / max(u_zoom, 0.001);
-
-    // Animate ripples outward
+    // Generate outward-moving waves.
     float wave = 0.5 + 0.5 * cos(
-        (r -  u_rippleDistance)
+        (worldDistance - u_rippleDistance)
         * 6.28318530718 / rippleSpacing
     );
 
-    float brightness = mix(
-        0.35,
-        0.75,
-        wave
-    );
+    float brightness = 0.75 * wave;
+    float transparency = wave;
 
 
-    // ============================================================
+    // ========================================================
     // OUTPUT
-    // ============================================================
-    float greyval = 0.5;
-    vec3 borderColor = vec3(greyval);
+    // ========================================================
 
-    vec3 finalColor = mix(
+    float alpha = playerAlpha * transparency;
+
+    outColor = vec4(
         vec3(brightness),
-        borderColor,
-        boxEdge
+        alpha
     );
-
-    outColor = vec4(finalColor, alpha);
 }

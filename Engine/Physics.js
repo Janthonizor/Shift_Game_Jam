@@ -5,8 +5,8 @@ export class Physics {
         this.orb_capture_distance = null;
         this.engagedOrb = null;
         this.springCaptureMultiplier = 0.2;
-        this.springStiffness = 4000;
-        this.tangentialOrbForce = 40000;
+        this.springStiffness = 5000;
+        this.tangentialOrbForce = 30000;
         this.springDamping = 2000;
 
     }
@@ -31,15 +31,10 @@ export class Physics {
 
         const tangentX = -dirY * direction;
         const tangentY = dirX * direction;
-
-        // Force magnitudes
-        const springStiffness = this.springStiffness;
-
-        // Spring force
         const stretch = distance - this.orb_capture_distance;
         const radialVelocity = player.vx * dirX + player.vy * dirY;
 
-        const spring = springStiffness * stretch;
+        const spring = this.springStiffness * stretch;
         const damper = this.springDamping * radialVelocity;
 
         const radialForce = spring - damper;
@@ -48,20 +43,17 @@ export class Physics {
             1.0 / (distance**2)*100000,
             3
         );
-        console.log("distance ratio:", this.orb_capture_distance / distance);
 
         const tangentialForce =
             this.tangentialOrbForce * tangentialMultiplier;
         
-        console.log("orb capture distance:", this.orb_capture_distance);
-        console.log("Tangential force:", tangentialForce);
-        console.log("tangential multiplier:", tangentialMultiplier);
         return {
-            fx: dirX * radialForce + tangentX *tangentialForce,
+            fx: dirX * radialForce + tangentX * tangentialForce,
             fy: dirY * radialForce + tangentY * tangentialForce
         };
 
     }
+
 
     captureOrb(player, orbs) {
 
@@ -93,6 +85,7 @@ export class Physics {
 
     }
 
+
     disengageOrb(player) {
 
         this.engagedOrb = null;
@@ -115,16 +108,11 @@ export class Physics {
         if (input.s) inputY -= 1;
         if (input.shift && this.engagedOrb == null) {
             this.captureOrb(player, orbs);
-            //console.log("Captured orb:", this.engagedOrb);
         }
         if (!input.shift && this.engagedOrb !== null) {
             this.disengageOrb(player);
         }
-        
 
-        
-
-        // Rotate input into the player's direction of travel
         const direction = player.direction ?? 0;
 
 
@@ -152,12 +140,6 @@ export class Physics {
             orbForceY = orbForce.fy;
 
         }
-        /*
-        console.log("Orb force:", {
-            fx: orbForceX,
-            fy: orbForceY
-        });
-        */
 
         const forceX = inputX * player.moveForce;
         const forceY = inputY * player.moveForce;
@@ -216,6 +198,7 @@ export class Physics {
             player.vy = -Math.abs(player.vy) * player.bounciness;
         }
     }
+
 
     update(player, input, bounds, orbs, dt) {
         this.updatePlayer(player, input, orbs, dt);

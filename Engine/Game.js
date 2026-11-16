@@ -21,7 +21,7 @@ export class Game {
             height: 128,
 
             mass: 150,
-            moveForce: 1000,
+            moveForce: 4000,
             drag: 25,
             bounciness: 0.9,
 
@@ -315,6 +315,7 @@ export class Game {
         this.updateOrbInteractions(dt);
 
         this.updateCamera(dt);
+
     }
 
 
