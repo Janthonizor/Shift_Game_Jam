@@ -1,3 +1,4 @@
+
 import { loadTexture } from "./Texture.js";
 import { ditheringSettings } from "./Dithering.js";
 import { calculateTangentPoints } from "./Geometry.js";
@@ -17,6 +18,7 @@ async function loadShader(path) {
 
 const [
     vertexShaderSource,
+    ditheringVertexShaderSource,
     ditheringShaderSource,
     backgroundShaderSource,
     playerShaderSource,
@@ -24,6 +26,7 @@ const [
     filamentShaderSource
 ] = await Promise.all([
     loadShader(new URL("./Shaders/vertex.vert", import.meta.url)),
+    loadShader(new URL("./Shaders/dithering.vert", import.meta.url)),
     loadShader(new URL("./Shaders/dithering.frag", import.meta.url)),
     loadShader(new URL("./Shaders/background.frag", import.meta.url)),
     loadShader(new URL("./Shaders/player.frag", import.meta.url)),
@@ -49,13 +52,14 @@ export class Renderer {
 
         const gl = this.gl;
 
-        gl.viewport(0, 0, canvas.width, canvas.height);
 
-
+        // ========================================================
+        // SHADER PROGRAMS
+        // ========================================================
 
         this.ditheringProgram = this.createProgram(
             gl,
-            vertexShaderSource,
+            ditheringVertexShaderSource,
             ditheringShaderSource
         );
 
@@ -86,10 +90,12 @@ export class Renderer {
 
         this.ditheringEnabled = true;
 
-        this.worldDithering = false;
-
         this.vertexBuffer = gl.createBuffer();
 
+
+        // ========================================================
+        // PLAYER SETTINGS
+        // ========================================================
 
         this.playerSettings = {
 
@@ -115,12 +121,17 @@ export class Renderer {
                 u_playerRadius:     { type: "1f" },
                 u_rippleDistance:   { type: "1f" },
 
-                u_color:             { type: "4fv" },
+                u_color:            { type: "4fv" },
 
                 u_radialProjection: { type: "1i" },
                 u_hasTail:          { type: "1i" }
             }
         };
+
+
+        // ========================================================
+        // ORB SETTINGS
+        // ========================================================
 
         this.orbSettings = {
 
@@ -130,25 +141,30 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_resolution:  { type: "2fv" },
-                u_size:        { type: "2fv" },
-                u_color:       { type: "4fv" },
-                u_time:        { type: "1f" },
-                u_zoom:        { type: "1f" },
-                u_active:      { type: "1i" },
-                u_alignment:   { type: "1f" },
-                u_spinAngle:   { type: "1f" },
-                u_screenPosition: { type: "2fv" },
-                u_screenCenter:   { type: "2fv" },
-                u_orbPosition: { type: "2fv" },
+                u_resolution:      { type: "2fv" },
+                u_size:            { type: "2fv" },
+                u_color:           { type: "4fv" },
+                u_time:            { type: "1f" },
+                u_zoom:            { type: "1f" },
+                u_active:          { type: "1i" },
+                u_alignment:       { type: "1f" },
+                u_spinAngle:       { type: "1f" },
+                u_screenPosition:  { type: "2fv" },
+                u_screenCenter:    { type: "2fv" },
+                u_orbPosition:     { type: "2fv" },
 
-                u_cameraPosition: { type: "2fv" },
+                u_cameraPosition:  { type: "2fv" },
 
-                u_viewRadius:     { type: "1f" },
-                u_compression:    { type: "1f" },
-                u_orbRadius:      { type: "1f" },
+                u_viewRadius:      { type: "1f" },
+                u_compression:     { type: "1f" },
+                u_orbRadius:       { type: "1f" },
             }
         };
+
+
+        // ========================================================
+        // FILAMENT SETTINGS
+        // ========================================================
 
         this.filamentSettings = {
 
@@ -158,22 +174,27 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_resolution:      { type: "2fv" },
-                u_size:            { type: "2fv" },
+                u_resolution:       { type: "2fv" },
+                u_size:             { type: "2fv" },
 
-                u_start:           { type: "2fv" },
-                u_end:             { type: "2fv" },
+                u_start:            { type: "2fv" },
+                u_end:              { type: "2fv" },
 
-                u_cameraPosition:  { type: "2fv" },
-                u_zoom:            { type: "1f" },
-                u_compression:     { type: "1f" },
-                u_viewRadius:      { type: "1f" },
-                u_radialProjection:{ type: "1i" },
+                u_cameraPosition:   { type: "2fv" },
+                u_zoom:             { type: "1f" },
+                u_compression:      { type: "1f" },
+                u_viewRadius:       { type: "1f" },
+                u_radialProjection: { type: "1i" },
 
-                u_time:            { type: "1f" },
-                u_color:           { type: "4fv" }
+                u_time:             { type: "1f" },
+                u_color:            { type: "4fv" }
             }
         };
+
+
+        // ========================================================
+        // BACKGROUND SETTINGS
+        // ========================================================
 
         this.backgroundSettings = {
 
@@ -183,19 +204,24 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_resolution:         { type: "2fv" },
-                u_texture:            { type: "1i" },
+                u_resolution:          { type: "2fv" },
+                u_texture:             { type: "1i" },
 
-                u_cameraPosition:     { type: "2fv" },
-                u_zoom:               { type: "1f" },
+                u_cameraPosition:      { type: "2fv" },
+                u_zoom:                { type: "1f" },
 
-                u_backgroundPosition: { type: "2fv" },
-                u_backgroundSize:     { type: "2fv" },
+                u_backgroundPosition:  { type: "2fv" },
+                u_backgroundSize:      { type: "2fv" },
 
-                u_compression:        { type: "1f" },
-                u_viewRadius:         { type: "1f" }
+                u_compression:         { type: "1f" },
+                u_viewRadius:          { type: "1f" }
             }
         };
+
+
+        // ========================================================
+        // DITHERING SETTINGS
+        // ========================================================
 
         this.ditheringSettings = {
 
@@ -205,27 +231,35 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_resolution:        { type: "2fv" },
                 u_texture:          { type: "1i" },
                 u_ditheringEnabled: { type: "1i" },
 
-                u_matrixSize:       { type: "1i", value: this.ditherObject.matrixSize },
+                u_matrixSize: {
+                    type: "1i",
+                    value: this.ditherObject.matrixSize
+                },
 
                 "u_bayerMatrix[0]": {
                     type: "1fv",
-                    value: new Float32Array(this.ditherObject.bayerMatrix)
+                    value: new Float32Array(
+                        this.ditherObject.bayerMatrix
+                    )
                 },
 
                 "u_palette[0]": {
                     type: "3fv",
                     value: new Float32Array(
-                        this.ditherObject.palette.flat().map(value => value / 255)
+                        this.ditherObject.palette
+                            .flat()
+                            .map(value => value / 255)
                     )
                 },
 
                 "u_cutoffs[0]": {
                     type: "1fv",
-                    value: new Float32Array(this.ditherObject.cutoffs)
+                    value: new Float32Array(
+                        this.ditherObject.cutoffs
+                    )
                 },
 
                 u_cutoffStrength: {
@@ -233,15 +267,41 @@ export class Renderer {
                     value: this.ditherObject.cutoffStrength
                 },
 
-                u_ditherScale: { type: "1f" }
+                u_ditherScale: {
+                    type: "1f"
+                }
             }
         };
 
-        this.uploadShaderSettings(this.playerSettings, this.playerProgram);
-        this.uploadShaderSettings(this.orbSettings, this.orbProgram);
-        this.uploadShaderSettings(this.filamentSettings, this.filamentProgram);
-        this.uploadShaderSettings(this.backgroundSettings, this.backgroundProgram);
-        this.uploadShaderSettings(this.ditheringSettings, this.ditheringProgram);
+
+        // ========================================================
+        // UPLOAD SHADER SETTINGS
+        // ========================================================
+
+        this.uploadShaderSettings(
+            this.playerSettings,
+            this.playerProgram
+        );
+
+        this.uploadShaderSettings(
+            this.orbSettings,
+            this.orbProgram
+        );
+
+        this.uploadShaderSettings(
+            this.filamentSettings,
+            this.filamentProgram
+        );
+
+        this.uploadShaderSettings(
+            this.backgroundSettings,
+            this.backgroundProgram
+        );
+
+        this.uploadShaderSettings(
+            this.ditheringSettings,
+            this.ditheringProgram
+        );
 
 
         this.darkTexture = this.createDarkTexture();
@@ -249,6 +309,10 @@ export class Renderer {
         this.createSceneFramebuffer();
     }
 
+
+    // ============================================================
+    // SHADER CREATION
+    // ============================================================
 
     createShader(gl, type, source) {
 
@@ -300,7 +364,7 @@ export class Renderer {
             gl.deleteShader(fragmentShader);
 
             throw new Error(error);
-        };
+        }
 
         gl.deleteShader(vertexShader);
         gl.deleteShader(fragmentShader);
@@ -308,10 +372,14 @@ export class Renderer {
         return {
             program,
             attributes: {},
-            uniforms:{}
+            uniforms: {}
         };
     }
 
+
+    // ============================================================
+    // FRAMEBUFFER
+    // ============================================================
 
     createSceneFramebuffer() {
 
@@ -322,13 +390,34 @@ export class Renderer {
 
         gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
 
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MIN_FILTER,
+            gl.NEAREST
+        );
 
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MAG_FILTER,
+            gl.NEAREST
+        );
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFramebuffer);
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_WRAP_S,
+            gl.CLAMP_TO_EDGE
+        );
+
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_WRAP_T,
+            gl.CLAMP_TO_EDGE
+        );
+
+        gl.bindFramebuffer(
+            gl.FRAMEBUFFER,
+            this.sceneFramebuffer
+        );
 
         gl.framebufferTexture2D(
             gl.FRAMEBUFFER,
@@ -347,6 +436,7 @@ export class Renderer {
     resizeSceneFramebuffer() {
 
         const gl = this.gl;
+
         const rect = this.canvas.getBoundingClientRect();
 
         const dpr = window.devicePixelRatio || 1;
@@ -356,16 +446,29 @@ export class Renderer {
 
         if (width <= 0 || height <= 0) return;
 
+
         const sizeChanged =
             this.sceneWidth !== width ||
             this.sceneHeight !== height;
 
+
+        // Always synchronize canvas backing dimensions.
+        if (
+            this.canvas.width !== width ||
+            this.canvas.height !== height
+        ) {
+            this.canvas.width = width;
+            this.canvas.height = height;
+        }
+
         if (!sizeChanged) return;
 
-        this.canvas.width = width;
-        this.canvas.height = height;
 
-        gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
+        // Resize scene texture.
+        gl.bindTexture(
+            gl.TEXTURE_2D,
+            this.sceneTexture
+        );
 
         gl.texImage2D(
             gl.TEXTURE_2D,
@@ -379,7 +482,12 @@ export class Renderer {
             null
         );
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFramebuffer);
+
+        // Verify framebuffer.
+        gl.bindFramebuffer(
+            gl.FRAMEBUFFER,
+            this.sceneFramebuffer
+        );
 
         if (
             gl.checkFramebufferStatus(gl.FRAMEBUFFER) !==
@@ -388,31 +496,54 @@ export class Renderer {
             throw new Error("Scene framebuffer is incomplete.");
         }
 
+
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+
 
         this.sceneWidth = width;
         this.sceneHeight = height;
 
-        gl.viewport(0, 0, width, height);
+
+        gl.viewport(
+            0,
+            0,
+            this.sceneWidth,
+            this.sceneHeight
+        );
     }
+
+
+    // ============================================================
+    // UNIFORMS
+    // ============================================================
 
     uploadShaderSettings(settings, shader) {
 
         const gl = this.gl;
 
         for (const attribute of settings.attributes) {
+
             shader.attributes[attribute] =
-                gl.getAttribLocation(shader.program, attribute);
+                gl.getAttribLocation(
+                    shader.program,
+                    attribute
+                );
         }
 
         for (const [name, config] of Object.entries(settings.uniforms)) {
 
             shader.uniforms[name] = {
-                location: gl.getUniformLocation(shader.program, name),
+
+                location: gl.getUniformLocation(
+                    shader.program,
+                    name
+                ),
+
                 type: config.type
             };
 
             if (config.value !== undefined) {
+
                 this.uploadUniforms(shader, {
                     [name]: config.value
                 });
@@ -441,7 +572,12 @@ export class Renderer {
     }
 
 
+    // ============================================================
+    // TEXTURES
+    // ============================================================
+
     load_render_texture(path) {
+
         return loadTexture(this.gl, path);
     }
 
@@ -463,15 +599,28 @@ export class Renderer {
             0,
             gl.RGBA,
             gl.UNSIGNED_BYTE,
-            new Uint8Array([0,0,0,255])
+            new Uint8Array([0, 0, 0, 255])
         );
 
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MIN_FILTER,
+            gl.NEAREST
+        );
+
+        gl.texParameteri(
+            gl.TEXTURE_2D,
+            gl.TEXTURE_MAG_FILTER,
+            gl.NEAREST
+        );
 
         return texture;
     }
 
+
+    // ============================================================
+    // GEOMETRY
+    // ============================================================
 
     renderQuad(shader, vertices) {
 
@@ -479,7 +628,10 @@ export class Renderer {
 
         gl.useProgram(shader.program);
 
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.vertexBuffer);
+        gl.bindBuffer(
+            gl.ARRAY_BUFFER,
+            this.vertexBuffer
+        );
 
         gl.bufferData(
             gl.ARRAY_BUFFER,
@@ -491,22 +643,39 @@ export class Renderer {
         const texCoord = shader.attributes.a_texCoord;
 
         gl.enableVertexAttribArray(position);
+
         gl.vertexAttribPointer(
-            position, 2, gl.FLOAT, false, 16, 0
+            position,
+            2,
+            gl.FLOAT,
+            false,
+            16,
+            0
         );
 
         gl.enableVertexAttribArray(texCoord);
+
         gl.vertexAttribPointer(
-            texCoord, 2, gl.FLOAT, false, 16, 8
+            texCoord,
+            2,
+            gl.FLOAT,
+            false,
+            16,
+            8
         );
 
-        gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.drawArrays(
+            gl.TRIANGLES,
+            0,
+            6
+        );
     }
 
 
     createQuadVertices(left, top, right, bottom) {
 
         return new Float32Array([
+
             left,  top,       0, 1,
             right, top,       1, 1,
             left,  bottom,    0, 0,
@@ -514,9 +683,30 @@ export class Renderer {
             left,  bottom,    0, 0,
             right, top,       1, 1,
             right, bottom,    1, 0
+
         ]);
     }
 
+
+    createFullscreenQuad() {
+
+        return new Float32Array([
+
+            -1,  1,  0, 1,
+             1,  1,  1, 1,
+            -1, -1,  0, 0,
+
+            -1, -1,  0, 0,
+             1,  1,  1, 1,
+             1, -1,  1, 0
+
+        ]);
+    }
+
+
+    // ============================================================
+    // BACKGROUND
+    // ============================================================
 
     renderSprite(sprite, camera = null) {
 
@@ -528,15 +718,15 @@ export class Renderer {
         const vertices = this.createQuadVertices(
             0,
             0,
-            this.canvas.width,
-            this.canvas.height
+            this.sceneWidth,
+            this.sceneHeight
         );
 
         this.uploadUniforms(shader, {
 
             u_resolution: [
-                this.canvas.width,
-                this.canvas.height
+                this.sceneWidth,
+                this.sceneHeight
             ],
 
             u_texture: 0,
@@ -547,9 +737,13 @@ export class Renderer {
 
             u_zoom: camera ? camera.zoom : 1,
 
-            u_compression: camera ? camera.compression : 1,
+            u_compression: camera
+                ? camera.compression
+                : 1,
 
-            u_viewRadius: camera ? camera.viewRadius : 1,
+            u_viewRadius: camera
+                ? camera.viewRadius
+                : 1,
 
             u_backgroundPosition: [
                 sprite.x,
@@ -563,31 +757,36 @@ export class Renderer {
         });
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, sprite.texture);
+
+        gl.bindTexture(
+            gl.TEXTURE_2D,
+            sprite.texture
+        );
 
         this.renderQuad(shader, vertices);
     }
 
 
+    // ============================================================
+    // PLAYER
+    // ============================================================
 
     renderPlayer(player, camera) {
 
         const shader = this.playerProgram;
 
-        // ========================================================
-        // CAMERA
-        // ========================================================
-
         const cameraPosition = camera
             ? { x: camera.x, y: camera.y }
             : {
-                x: this.canvas.width * 0.5,
-                y: this.canvas.height * 0.5
+                x: this.sceneWidth * 0.5,
+                y: this.sceneHeight * 0.5
             };
 
         const zoom = camera ? camera.zoom : 1.0;
 
-        const compression = camera ? camera.compression : 1.0;
+        const compression = camera
+            ? camera.compression
+            : 1.0;
 
         const viewRadius = camera
             ? camera.viewRadius
@@ -598,11 +797,6 @@ export class Renderer {
             : false;
 
 
-        // ========================================================
-        // PLAYER GEOMETRY
-        // ========================================================
-
-        // This is now a WORLD-SPACE radius.
         const radius = Math.min(
             player.width,
             player.height
@@ -614,11 +808,6 @@ export class Renderer {
         };
 
 
-        // ========================================================
-        // TAIL GEOMETRY
-        // ========================================================
-
-        // Calculate tangent points in WORLD SPACE.
         const tail = calculateTangentPoints(
             position,
             radius,
@@ -639,27 +828,19 @@ export class Renderer {
         ];
 
 
-        // ========================================================
-        // FULLSCREEN QUAD
-        // ========================================================
-
         const vertices = this.createQuadVertices(
             0,
             0,
-            this.canvas.width,
-            this.canvas.height
+            this.sceneWidth,
+            this.sceneHeight
         );
 
-
-        // ========================================================
-        // UNIFORMS
-        // ========================================================
 
         this.uploadUniforms(shader, {
 
             u_resolution: [
-                this.canvas.width,
-                this.canvas.height
+                this.sceneWidth,
+                this.sceneHeight
             ],
 
             u_cameraPosition: [
@@ -690,13 +871,13 @@ export class Renderer {
         });
 
 
-        // ========================================================
-        // RENDER
-        // ========================================================
-
         this.renderQuad(shader, vertices);
     }
 
+
+    // ============================================================
+    // FILAMENT
+    // ============================================================
 
     renderFilament(player, orb, camera) {
 
@@ -712,24 +893,25 @@ export class Renderer {
             y: orb.y
         };
 
-        // Bounding box will initially cover the entire screen.
+
         const vertices = this.createQuadVertices(
             0,
             0,
-            this.canvas.width,
-            this.canvas.height
+            this.sceneWidth,
+            this.sceneHeight
         );
+
 
         this.uploadUniforms(shader, {
 
             u_resolution: [
-                this.canvas.width,
-                this.canvas.height
+                this.sceneWidth,
+                this.sceneHeight
             ],
 
             u_size: [
-                this.canvas.width,
-                this.canvas.height
+                this.sceneWidth,
+                this.sceneHeight
             ],
 
             u_start: [start.x, start.y],
@@ -748,10 +930,14 @@ export class Renderer {
             u_color: [0.45, 0.75, 1.0, 1.0]
         });
 
+
         this.renderQuad(shader, vertices);
     }
 
 
+    // ============================================================
+    // ORBS
+    // ============================================================
 
     renderOrb(orb, camera) {
 
@@ -762,9 +948,6 @@ export class Renderer {
             orb.height
         ) * 0.42;
 
-        // ============================================================
-        // CALCULATE DISTORTED BOUNDING BOX
-        // ============================================================
 
         const segments = 48;
 
@@ -772,6 +955,7 @@ export class Renderer {
         let right = -Infinity;
         let top = Infinity;
         let bottom = -Infinity;
+
 
         for (let i = 0; i < segments; i++) {
 
@@ -790,16 +974,16 @@ export class Renderer {
 
             top = Math.min(top, screen.y);
             bottom = Math.max(bottom, screen.y);
-
         }
 
-        // A little padding for antialiasing
+
         const padding = 8;
 
         left -= padding;
         right += padding;
         top -= padding;
         bottom += padding;
+
 
         const width = right - left;
         const height = bottom - top;
@@ -809,6 +993,7 @@ export class Renderer {
             y: (top + bottom) * 0.5
         };
 
+
         const vertices = this.createQuadVertices(
             left,
             top,
@@ -816,15 +1001,12 @@ export class Renderer {
             bottom
         );
 
-        // ============================================================
-        // UPLOAD UNIFORMS
-        // ============================================================
 
         this.uploadUniforms(shader, {
 
             u_resolution: [
-                this.canvas.width,
-                this.canvas.height
+                this.sceneWidth,
+                this.sceneHeight
             ],
 
             u_size: [width, height],
@@ -837,8 +1019,8 @@ export class Renderer {
             ],
 
             u_screenCenter: [
-                this.canvas.width * 0.5,
-                this.canvas.height * 0.5
+                this.sceneWidth * 0.5,
+                this.sceneHeight * 0.5
             ],
 
             u_cameraPosition: [
@@ -857,76 +1039,109 @@ export class Renderer {
             u_active: orb.inRange ? 1 : 0,
             u_alignment: orb.alignment,
             u_spinAngle: orb.spinAngle,
-            u_orbPosition: [orb.x, orb.y],
 
+            u_orbPosition: [
+                orb.x,
+                orb.y
+            ]
         });
 
-        this.renderQuad(shader, vertices);
 
+        this.renderQuad(shader, vertices);
     }
 
+
+    // ============================================================
+    // FINAL DITHERING PASS
+    // ============================================================
 
     renderDithering() {
 
         const gl = this.gl;
         const shader = this.ditheringProgram;
 
-        // Return to the default framebuffer.
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        const width = gl.drawingBufferWidth;
+        const height = gl.drawingBufferHeight;
+
+
+        // Default framebuffer.
+        gl.bindFramebuffer(
+            gl.FRAMEBUFFER,
+            null
+        );
 
         gl.viewport(
             0,
             0,
-            this.canvas.width,
-            this.canvas.height
+            width,
+            height
         );
 
-        gl.disable(gl.BLEND);
 
-        gl.clearColor(0, 0, 0, 1);
+        // Ensure the final pass writes every pixel.
+        gl.disable(gl.BLEND);
+        gl.disable(gl.DEPTH_TEST);
+        gl.disable(gl.SCISSOR_TEST);
+
+        gl.colorMask(true, true, true, true);
+
+
+        // TEMPORARY DIAGNOSTIC CLEAR COLOR.
+        // Uncovered pixels will appear magenta.
+        gl.clearColor(1, 0, 1, 1);
+
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        // Bind the completed scene texture.
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
 
-        // Fullscreen quad.
-        const vertices = this.createQuadVertices(
-            0,
-            0,
-            this.canvas.width,
-            this.canvas.height
+        // Bind completed scene texture.
+        gl.activeTexture(gl.TEXTURE0);
+
+        gl.bindTexture(
+            gl.TEXTURE_2D,
+            this.sceneTexture
         );
 
-        // Final-pass uniforms.
-        this.uploadUniforms(shader, {
 
-            u_resolution: [
-                this.canvas.width,
-                this.canvas.height
-            ],
+        // Dedicated clip-space fullscreen quad.
+        const vertices = this.createFullscreenQuad();
+
+
+        this.uploadUniforms(shader, {
 
             u_texture: 0,
 
             u_ditheringEnabled: this.ditheringEnabled ? 1 : 0,
 
-            u_ditherScale: 0.75
+            u_ditherScale: 1.0
 
         });
 
+
         this.renderQuad(shader, vertices);
+
     }
 
+
+    // ============================================================
+    // MAIN RENDER
+    // ============================================================
 
     render(level, player, camera) {
 
         const gl = this.gl;
 
+
+        // ========================================================
+        // RESIZE
+        // ========================================================
+
         const rect = this.canvas.getBoundingClientRect();
+
         const dpr = window.devicePixelRatio || 1;
 
         const width = Math.round(rect.width * dpr);
         const height = Math.round(rect.height * dpr);
+
 
         if (
             this.sceneWidth !== width ||
@@ -936,55 +1151,104 @@ export class Renderer {
         }
 
 
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.sceneFramebuffer);
+        // ========================================================
+        // SCENE FRAMEBUFFER
+        // ========================================================
+
+        gl.bindFramebuffer(
+            gl.FRAMEBUFFER,
+            this.sceneFramebuffer
+        );
 
         gl.viewport(
             0,
             0,
-            this.canvas.width,
-            this.canvas.height
+            this.sceneWidth,
+            this.sceneHeight
         );
 
+
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+        gl.blendFunc(
+            gl.SRC_ALPHA,
+            gl.ONE_MINUS_SRC_ALPHA
+        );
+
 
         gl.clearColor(0, 0, 0, 1);
+
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-        this.renderSprite(level.background, camera);
+
+        // ========================================================
+        // DRAW SCENE
+        // ========================================================
+
+        this.renderSprite(
+            level.background,
+            camera
+        );
+
 
         for (const orb of level.orbs) {
-            this.renderOrb(orb, camera);
+
+            this.renderOrb(
+                orb,
+                camera
+            );
         }
 
-        this.renderPlayer(player, camera);
+
+        this.renderPlayer(
+            player,
+            camera
+        );
+
 
         if (player.engaged && player.engagedOrb) {
+
             this.renderFilament(
                 player,
                 player.engagedOrb,
                 camera
             );
         }
+        console.table({
+
+            // CSS dimensions
+            cssWidth: this.canvas.getBoundingClientRect().width,
+            cssHeight: this.canvas.getBoundingClientRect().height,
+
+            // Canvas attributes
+            canvasWidth: this.canvas.width,
+            canvasHeight: this.canvas.height,
+
+            // Actual WebGL drawing buffer
+            drawingBufferWidth: gl.drawingBufferWidth,
+            drawingBufferHeight: gl.drawingBufferHeight,
+
+            // Our framebuffer allocation
+            sceneWidth: this.sceneWidth,
+            sceneHeight: this.sceneHeight,
+
+            // Actual framebuffer texture dimensions
+            expectedTextureWidth: this.sceneWidth,
+            expectedTextureHeight: this.sceneHeight,
+
+            // Device scaling
+            devicePixelRatio: window.devicePixelRatio,
+
+            // Viewport
+            viewport: gl.getParameter(gl.VIEWPORT)
+        });
+
+        // ========================================================
+        // FINAL PASS
+        // ========================================================
 
         this.renderDithering();
 
-        console.table({
-            iframeWidth: window.innerWidth,
-            iframeHeight: window.innerHeight,
-
-            canvasCSSWidth: this.canvas.getBoundingClientRect().width,
-            canvasCSSHeight: this.canvas.getBoundingClientRect().height,
-
-            drawingBufferWidth: this.canvas.width,
-            drawingBufferHeight: this.canvas.height,
-
-            devicePixelRatio: window.devicePixelRatio
-        });
-
 
     }
-
-
 }
-
