@@ -118,6 +118,7 @@ void main() {
         inside *
         (u_active ? 1.0 : 0.0);
 
+
     // ============================================================
     // OUTPUT
     // ============================================================
@@ -127,11 +128,17 @@ void main() {
         patternAlpha
     );
 
-    vec3 color = mix(
-        u_color.rgb,
-        vec3(0.75),
+    // Foreground palette.
+    float outlineBrightness = 0.75;
+    float bladeBrightness = 0.9;
+
+    float brightness = mix(
+        outlineBrightness,
+        bladeBrightness,
         patternAlpha
     );
+
+    vec3 color = vec3(brightness);
 
     outColor = vec4(
         color,

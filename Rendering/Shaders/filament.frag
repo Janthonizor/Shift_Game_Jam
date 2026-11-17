@@ -242,7 +242,6 @@ void main() {
         bundleDistance
     );
 
-
     // ========================================================
     // FINAL COLOR
     // ========================================================
@@ -260,16 +259,20 @@ void main() {
 
     intensity *= pulse;
 
-    float gray = clamp(
-        0.025
-        + glow * 0.04
-        + filaments * 0.12
-        + filamentBody * 0.30
-        + filamentCore * 0.35
-        + core * 0.65,
-        0.0,
-        0.85
-    );
+
+    // ========================================================
+    // FOREGROUND GRAYSCALE
+    // ========================================================
+    
+    float gray =
+        0.02
+        + glow * 0.08
+        + filaments * 0.08
+        + filamentBody * 0.12
+        + filamentCore * 0.10
+        + core * 0.10;
+
+    gray = clamp(gray, 0.0, 0.5);
 
     vec3 color = vec3(gray);
 

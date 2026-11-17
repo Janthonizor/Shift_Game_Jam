@@ -5,13 +5,13 @@ precision highp float;
 in vec2 v_texCoord;
 
 uniform sampler2D u_texture;
+uniform vec2 u_resolution;
 
 uniform bool u_ditheringEnabled;
-uniform int u_matrixSize;
 uniform float u_bayerMatrix[64];
 
-uniform vec3 u_palette[5];
-uniform float u_cutoffs[4];
+uniform vec3 u_backgroundPalette[8];
+uniform vec3 u_foregroundPalette[8];
 
 uniform float u_cutoffStrength;
 uniform float u_ditherScale;
@@ -20,42 +20,85 @@ out vec4 outColor;
 
 void main()
 {
-    vec4 color = texture(u_texture, v_texCoord);
+    // ========================================================
+    // FRAMEBUFFER PIXEL QUANTIZATION
+    // ========================================================
+
+    float scale = max(u_ditherScale, 1.0);
+
+    // Identify the lower-left corner of the current pixel block.
+    vec2 pixelBlock = floor(
+        gl_FragCoord.xy / scale
+    );
+
+    // Sample from the center of that block.
+    vec2 samplePosition =
+        (pixelBlock + 0.5) * scale;
+
+    vec2 sampleUV = samplePosition / u_resolution;
+
+    // Clamp edge samples to the framebuffer.
+    sampleUV = clamp(
+        sampleUV,
+        vec2(0.5) / u_resolution,
+        vec2(1.0) - vec2(0.5) / u_resolution
+    );
+
+    vec4 color = texture(u_texture, sampleUV);
 
     if (!u_ditheringEnabled) {
         outColor = color;
         return;
     }
 
-    ivec2 pixel = ivec2(
-        floor(gl_FragCoord.xy / u_ditherScale)
-    );
+    // ========================================================
+    // BAYER MATRIX
+    // ========================================================
 
-    int x = pixel.x % u_matrixSize;
-    int y = pixel.y % u_matrixSize;
+    ivec2 pixel = ivec2(pixelBlock);
 
-    int index = y * u_matrixSize + x;
+    int x = pixel.x % 4;
+    int y = pixel.y % 4;
 
-    float threshold = u_bayerMatrix[index] / 64.0;
+    int index = y * 4 + x;
+
+    float threshold = (
+        u_bayerMatrix[index] + 0.5
+    ) / 16.0;
+
+    // ========================================================
+    // LUMINANCE
+    // ========================================================
 
     float luminance = dot(
         color.rgb,
         vec3(0.299, 0.587, 0.114)
     );
 
-    float adjusted = luminance + 
-        (threshold - 0.5) * u_cutoffStrength;
+    bool foreground = luminance >= 0.5;
 
-    int paletteIndex = 0;
+    float localLuminance = foreground
+        ? (luminance - 0.5) * 2.0
+        : luminance * 2.0;
 
-    for (int i = 0; i < 4; i++) {
-        if (adjusted > u_cutoffs[i]) {
-            paletteIndex = i + 1;
-        }
-    }
+    // ========================================================
+    // PALETTE SELECTION
+    // ========================================================
 
-    outColor = vec4(
-        u_palette[paletteIndex],
-        color.a
-    );
+    float palettePosition = localLuminance * 7.0;
+
+    int lowerIndex = int(floor(palettePosition));
+    int upperIndex = min(lowerIndex + 1, 7);
+
+    float blend = fract(palettePosition);
+
+    int paletteIndex = blend > threshold
+        ? upperIndex
+        : lowerIndex;
+
+    vec3 result = foreground
+        ? u_foregroundPalette[paletteIndex]
+        : u_backgroundPalette[paletteIndex];
+
+    outColor = vec4(result, color.a);
 }

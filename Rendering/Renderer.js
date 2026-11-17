@@ -231,12 +231,12 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_texture:          { type: "1i" },
-                u_ditheringEnabled: { type: "1i" },
+                u_texture: {
+                    type: "1i"
+                },
 
-                u_matrixSize: {
-                    type: "1i",
-                    value: this.ditherObject.matrixSize
+                u_ditheringEnabled: {
+                    type: "1i"
                 },
 
                 "u_bayerMatrix[0]": {
@@ -246,19 +246,21 @@ export class Renderer {
                     )
                 },
 
-                "u_palette[0]": {
+                "u_backgroundPalette[0]": {
                     type: "3fv",
                     value: new Float32Array(
-                        this.ditherObject.palette
+                        this.ditherObject.backgroundPalette
                             .flat()
                             .map(value => value / 255)
                     )
                 },
 
-                "u_cutoffs[0]": {
-                    type: "1fv",
+                "u_foregroundPalette[0]": {
+                    type: "3fv",
                     value: new Float32Array(
-                        this.ditherObject.cutoffs
+                        this.ditherObject.foregroundPalette
+                            .flat()
+                            .map(value => value / 255)
                     )
                 },
 
@@ -269,9 +271,13 @@ export class Renderer {
 
                 u_ditherScale: {
                     type: "1f"
+                },
+                u_resolution: {
+                    type: "2fv"
                 }
             }
         };
+
 
 
         // ========================================================
@@ -1064,7 +1070,6 @@ export class Renderer {
         const height = gl.drawingBufferHeight;
 
 
-        // Default framebuffer.
         gl.bindFramebuffer(
             gl.FRAMEBUFFER,
             null
@@ -1077,23 +1082,14 @@ export class Renderer {
             height
         );
 
-
-        // Ensure the final pass writes every pixel.
         gl.disable(gl.BLEND);
-        gl.disable(gl.DEPTH_TEST);
-        gl.disable(gl.SCISSOR_TEST);
 
-        gl.colorMask(true, true, true, true);
-
-
-        // TEMPORARY DIAGNOSTIC CLEAR COLOR.
-        // Uncovered pixels will appear magenta.
-        gl.clearColor(1, 0, 1, 1);
+        gl.clearColor(0, 0, 0, 1);
 
         gl.clear(gl.COLOR_BUFFER_BIT);
 
 
-        // Bind completed scene texture.
+
         gl.activeTexture(gl.TEXTURE0);
 
         gl.bindTexture(
@@ -1101,8 +1097,6 @@ export class Renderer {
             this.sceneTexture
         );
 
-
-        // Dedicated clip-space fullscreen quad.
         const vertices = this.createFullscreenQuad();
 
 
@@ -1112,7 +1106,12 @@ export class Renderer {
 
             u_ditheringEnabled: this.ditheringEnabled ? 1 : 0,
 
-            u_ditherScale: 1.0
+            u_ditherScale: 1.0,
+
+            u_resolution: [
+                this.sceneWidth,
+                this.sceneHeight
+            ]
 
         });
 
@@ -1122,26 +1121,18 @@ export class Renderer {
     }
 
 
-    // ============================================================
-    // MAIN RENDER
-    // ============================================================
 
     render(level, player, camera) {
 
         const gl = this.gl;
-
-
-        // ========================================================
-        // RESIZE
-        // ========================================================
 
         const rect = this.canvas.getBoundingClientRect();
 
         const dpr = window.devicePixelRatio || 1;
 
         const width = Math.round(rect.width * dpr);
-        const height = Math.round(rect.height * dpr);
 
+        const height = Math.round(rect.height * dpr);
 
         if (
             this.sceneWidth !== width ||
@@ -1149,11 +1140,6 @@ export class Renderer {
         ) {
             this.resizeSceneFramebuffer();
         }
-
-
-        // ========================================================
-        // SCENE FRAMEBUFFER
-        // ========================================================
 
         gl.bindFramebuffer(
             gl.FRAMEBUFFER,
@@ -1167,7 +1153,6 @@ export class Renderer {
             this.sceneHeight
         );
 
-
         gl.enable(gl.BLEND);
 
         gl.blendFunc(
@@ -1175,15 +1160,10 @@ export class Renderer {
             gl.ONE_MINUS_SRC_ALPHA
         );
 
-
         gl.clearColor(0, 0, 0, 1);
 
         gl.clear(gl.COLOR_BUFFER_BIT);
 
-
-        // ========================================================
-        // DRAW SCENE
-        // ========================================================
 
         this.renderSprite(
             level.background,
@@ -1214,38 +1194,6 @@ export class Renderer {
                 camera
             );
         }
-        console.table({
-
-            // CSS dimensions
-            cssWidth: this.canvas.getBoundingClientRect().width,
-            cssHeight: this.canvas.getBoundingClientRect().height,
-
-            // Canvas attributes
-            canvasWidth: this.canvas.width,
-            canvasHeight: this.canvas.height,
-
-            // Actual WebGL drawing buffer
-            drawingBufferWidth: gl.drawingBufferWidth,
-            drawingBufferHeight: gl.drawingBufferHeight,
-
-            // Our framebuffer allocation
-            sceneWidth: this.sceneWidth,
-            sceneHeight: this.sceneHeight,
-
-            // Actual framebuffer texture dimensions
-            expectedTextureWidth: this.sceneWidth,
-            expectedTextureHeight: this.sceneHeight,
-
-            // Device scaling
-            devicePixelRatio: window.devicePixelRatio,
-
-            // Viewport
-            viewport: gl.getParameter(gl.VIEWPORT)
-        });
-
-        // ========================================================
-        // FINAL PASS
-        // ========================================================
 
         this.renderDithering();
 

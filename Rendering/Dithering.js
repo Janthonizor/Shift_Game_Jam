@@ -1,6 +1,6 @@
-export const ditheringSettings = {
+    /*export const ditheringSettings = {
     enabled: true,
-    matrixSize: 8,
+    matrixSize: 4,
 
     bayerMatrix: [
          0, 48, 12, 60,  3, 51, 15, 63,
@@ -21,7 +21,8 @@ export const ditheringSettings = {
         [255, 255, 200]
     ],
 
-    cutoffStrength: 0.5,
+
+    cutoffStrength: 0.4,
     cutoffOffset: 1.0
 };
 
@@ -31,3 +32,39 @@ ditheringSettings.cutoffs = Array.from(
         ((i + 1) / ditheringSettings.palette.length)
         * ditheringSettings.cutoffOffset
 );
+*/
+
+
+export const ditheringSettings = {
+    enabled: true,
+    matrixSize: 4,
+
+    bayerMatrix: [
+         0,  8,  2, 10,
+        12,  4, 14,  6,
+         3, 11,  1,  9,
+        15,  7, 13,  5
+    ],
+
+    backgroundPalette: [
+        [8, 13, 32],
+        [20, 35, 68],
+        [36, 71, 107],
+        [57, 113, 138],
+        [105, 165, 160],
+        [165, 201, 174],
+        [214, 220, 192],
+        [240, 232, 203]
+    ],
+
+    foregroundPalette: [
+        [32, 13, 50],
+        [66, 20, 79],
+        [112, 36, 95],
+        [164, 61, 112],
+        [214, 91, 121],
+        [242, 138, 131],
+        [255, 192, 154],
+        [255, 240, 201]
+    ]
+};

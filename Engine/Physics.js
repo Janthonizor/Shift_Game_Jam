@@ -6,7 +6,7 @@ export class Physics {
         this.engagedOrb = null;
         this.springCaptureMultiplier = 0.2;
         this.springStiffness = 5000;
-        this.tangentialOrbForce = 30000;
+        this.tangentialOrbForce = 20000;
         this.springDamping = 2000;
 
     }
@@ -152,6 +152,19 @@ export class Physics {
 
         player.vx += player.ax * dt;
         player.vy += player.ay * dt;
+
+        // Enforce maximum speed.
+        const speed = Math.hypot(player.vx, player.vy);
+
+        if (speed > player.maxSpeed) {
+
+            const scale = player.maxSpeed / speed;
+
+            player.vx *= scale;
+            player.vy *= scale;
+
+        }
+
         player.speed = Math.hypot(player.vx, player.vy);
 
         player.rippleDistance += player.speed/20 * dt;

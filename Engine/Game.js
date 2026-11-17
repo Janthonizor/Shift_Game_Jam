@@ -22,8 +22,9 @@ export class Game {
 
             mass: 150,
             moveForce: 100,
-            drag: 25,
+            drag: 15,
             bounciness: 0.9,
+            maxSpeed: 1200,
 
             vx: 100,
             vy: 100,

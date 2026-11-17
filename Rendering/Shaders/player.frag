@@ -209,7 +209,7 @@ void main() {
         * 6.28318530718 / rippleSpacing
     );
 
-    float brightness = 0.75 * wave;
+    float brightness = mix(0.6, 0.9, wave);
     float transparency = wave;
 
 
