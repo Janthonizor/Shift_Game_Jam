@@ -40,3 +40,35 @@ export function calculateTangentPoints(
         c: markerPosition
     };
 }
+
+
+export function createQuadVertices(left, top, right, bottom) {
+
+    return new Float32Array([
+
+        left,  top,       0, 1,
+        right, top,       1, 1,
+        left,  bottom,    0, 0,
+
+        left,  bottom,    0, 0,
+        right, top,       1, 1,
+        right, bottom,    1, 0
+
+    ]);
+}
+
+export function createFullscreenQuad() {
+
+    return new Float32Array([
+
+        -1,  1,  0, 1,
+            1,  1,  1, 1,
+        -1, -1,  0, 0,
+
+        -1, -1,  0, 0,
+            1,  1,  1, 1,
+            1, -1,  1, 0
+
+    ]);
+}
+

@@ -19,27 +19,13 @@ body {
 
 .game-container {
     display: flex;
-    flex-direction: column;
+    justify-content: center;
     align-items: center;
-    gap: 20px;
 
     width: 100%;
     height: 100%;
+    min-width: 0;
     min-height: 0;
-}
-
-.game-header {
-    width: 100%;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    flex-shrink: 0;
-}
-
-.title-image {
-    width: 400px;
-    height: 100px;
-    background: white;
 }
 
 canvas {
@@ -50,10 +36,21 @@ canvas {
     width: 100%;
     height: 100%;
 
-    flex: 1 1 0;
+    max-width: 100%;
+    max-height: 100%;
+
+    aspect-ratio: 1 / 1;
+    object-fit: contain;
+
+    flex: 0 1 auto;
     min-width: 0;
     min-height: 0;
-
-    aspect-ratio: auto;
-    object-fit: fill;
+}
+canvas,
+canvas:focus,
+canvas:focus-visible,
+canvas:active {
+    outline: none !important;
+    border: none !important;
+    box-shadow: none !important;
 }

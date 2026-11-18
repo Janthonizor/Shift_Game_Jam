@@ -9,12 +9,12 @@ export class Camera {
         this.targetX = 0;
         this.targetY = 0;
 
-        this.smoothing = 9;
+        this.smoothing = 10;
         this.lookBehind = 0.15;
 
         this.zoom = 1.0;
         this.minZoom = 0.5;
-        this.maxZoom = 3.0;
+        this.maxZoom = 2.5;
         this.zoomSpeed = 0.001;
 
         this.compression = 700;

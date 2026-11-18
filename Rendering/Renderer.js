@@ -1,19 +1,23 @@
 
 import { loadTexture } from "./Texture.js";
 import { ditheringSettings } from "./Dithering.js";
-import { calculateTangentPoints } from "./Geometry.js";
+import {
+    createFramebuffer,
+    resizeFramebuffer,
+    beginScene
+} from "./Framebuffer.js";
 
-
-async function loadShader(path) {
-
-    const response = await fetch(path);
-
-    if (!response.ok) {
-        throw new Error(`Failed to load shader: ${path}`);
-    }
-
-    return response.text();
-}
+import {
+    calculateTangentPoints,
+    createQuadVertices,
+    createFullscreenQuad
+} from "./Geometry.js";
+import {
+    loadShader,
+    createProgram,
+    uploadShaderSettings,
+    uploadUniforms
+} from "./Shader.js";
 
 
 const [
@@ -23,7 +27,8 @@ const [
     backgroundShaderSource,
     playerShaderSource,
     orbShaderSource,
-    filamentShaderSource
+    filamentShaderSource,
+    gameplayButtonsShaderSource
 ] = await Promise.all([
     loadShader(new URL("./Shaders/vertex.vert", import.meta.url)),
     loadShader(new URL("./Shaders/dithering.vert", import.meta.url)),
@@ -31,7 +36,8 @@ const [
     loadShader(new URL("./Shaders/background.frag", import.meta.url)),
     loadShader(new URL("./Shaders/player.frag", import.meta.url)),
     loadShader(new URL("./Shaders/orb.frag", import.meta.url)),
-    loadShader(new URL("./Shaders/filament.frag", import.meta.url))
+    loadShader(new URL("./Shaders/filament.frag", import.meta.url)),
+    loadShader(new URL("./Shaders/gameplayButtons.frag", import.meta.url))
 ]);
 
 
@@ -52,50 +58,45 @@ export class Renderer {
 
         const gl = this.gl;
 
-
-        // ========================================================
-        // SHADER PROGRAMS
-        // ========================================================
-
-        this.ditheringProgram = this.createProgram(
+        this.ditheringProgram = createProgram(
             gl,
             ditheringVertexShaderSource,
             ditheringShaderSource
         );
 
-        this.backgroundProgram = this.createProgram(
+        this.backgroundProgram = createProgram(
             gl,
             vertexShaderSource,
             backgroundShaderSource
         );
 
-        this.playerProgram = this.createProgram(
+        this.playerProgram = createProgram(
             gl,
             vertexShaderSource,
             playerShaderSource
         );
 
-        this.orbProgram = this.createProgram(
+        this.orbProgram = createProgram(
             gl,
             vertexShaderSource,
             orbShaderSource
         );
 
-        this.filamentProgram = this.createProgram(
+        this.filamentProgram = createProgram(
             gl,
             vertexShaderSource,
             filamentShaderSource
         );
 
+        this.gameplayButtonsProgram = createProgram(
+            gl,
+            vertexShaderSource,
+            gameplayButtonsShaderSource
+        );
 
         this.ditheringEnabled = true;
 
         this.vertexBuffer = gl.createBuffer();
-
-
-        // ========================================================
-        // PLAYER SETTINGS
-        // ========================================================
 
         this.playerSettings = {
 
@@ -128,11 +129,6 @@ export class Renderer {
             }
         };
 
-
-        // ========================================================
-        // ORB SETTINGS
-        // ========================================================
-
         this.orbSettings = {
 
             attributes: [
@@ -161,11 +157,6 @@ export class Renderer {
             }
         };
 
-
-        // ========================================================
-        // FILAMENT SETTINGS
-        // ========================================================
-
         this.filamentSettings = {
 
             attributes: [
@@ -191,11 +182,6 @@ export class Renderer {
             }
         };
 
-
-        // ========================================================
-        // BACKGROUND SETTINGS
-        // ========================================================
-
         this.backgroundSettings = {
 
             attributes: [
@@ -217,11 +203,6 @@ export class Renderer {
                 u_viewRadius:          { type: "1f" }
             }
         };
-
-
-        // ========================================================
-        // DITHERING SETTINGS
-        // ========================================================
 
         this.ditheringSettings = {
 
@@ -278,355 +259,93 @@ export class Renderer {
             }
         };
 
+        this.gameplayButtonsSettings = {
 
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
 
-        // ========================================================
-        // UPLOAD SHADER SETTINGS
-        // ========================================================
+            uniforms: {
+                u_resolution:       { type: "2fv" },
+                u_center:           { type: "2fv" },
 
-        this.uploadShaderSettings(
+                u_boundaryRadius:   { type: "1f" },
+                u_horizontalOffset: { type: "1f" },
+                u_verticalOffset:   { type: "1f" },
+
+                u_menuHovered:      { type: "1i" },
+                u_settingsHovered:  { type: "1i" },
+                u_restartHovered:   { type: "1i" },
+                u_pauseHovered:     { type: "1i" },
+
+                u_menuPressed:      { type: "1i" },
+                u_settingsPressed:  { type: "1i" },
+                u_restartPressed:   { type: "1i" },
+                u_pausePressed:     { type: "1i" },
+
+                u_iconRadius:       { type: "1f" },
+
+                u_menuPosition:     { type: "2fv" },
+                u_settingsPosition: { type: "2fv" },
+                u_restartPosition:  { type: "2fv" },
+                u_pausePosition:    { type: "2fv" },
+
+                u_isPaused:         { type: "1i" },
+                u_inSettings:       { type: "1i" },
+                u_inMainMenu:       { type: "1i" }
+            }
+        };
+
+        uploadShaderSettings(
+            gl,
             this.playerSettings,
             this.playerProgram
         );
 
-        this.uploadShaderSettings(
+        uploadShaderSettings(
+            gl,
             this.orbSettings,
             this.orbProgram
         );
 
-        this.uploadShaderSettings(
+        uploadShaderSettings(
+            gl,
             this.filamentSettings,
             this.filamentProgram
         );
 
-        this.uploadShaderSettings(
+        uploadShaderSettings(
+            gl,
             this.backgroundSettings,
             this.backgroundProgram
         );
 
-        this.uploadShaderSettings(
+        uploadShaderSettings(
+            gl,
             this.ditheringSettings,
             this.ditheringProgram
         );
 
-
-        this.darkTexture = this.createDarkTexture();
-
-        this.createSceneFramebuffer();
-    }
-
-
-    // ============================================================
-    // SHADER CREATION
-    // ============================================================
-
-    createShader(gl, type, source) {
-
-        const shader = gl.createShader(type);
-
-        gl.shaderSource(shader, source);
-        gl.compileShader(shader);
-
-        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-
-            const error = gl.getShaderInfoLog(shader);
-
-            gl.deleteShader(shader);
-
-            throw new Error(error);
-        }
-
-        return shader;
-    }
-
-
-    createProgram(gl, vertexSource, fragmentSource) {
-
-        const vertexShader = this.createShader(
+        uploadShaderSettings(
             gl,
-            gl.VERTEX_SHADER,
-            vertexSource
+            this.gameplayButtonsSettings,
+            this.gameplayButtonsProgram
         );
 
-        const fragmentShader = this.createShader(
-            gl,
-            gl.FRAGMENT_SHADER,
-            fragmentSource
-        );
+        this.framebuffer = createFramebuffer(gl, canvas);
 
-        const program = gl.createProgram();
-
-        gl.attachShader(program, vertexShader);
-        gl.attachShader(program, fragmentShader);
-
-        gl.linkProgram(program);
-
-        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-
-            const error = gl.getProgramInfoLog(program);
-
-            gl.deleteProgram(program);
-            gl.deleteShader(vertexShader);
-            gl.deleteShader(fragmentShader);
-
-            throw new Error(error);
-        }
-
-        gl.deleteShader(vertexShader);
-        gl.deleteShader(fragmentShader);
-
-        return {
-            program,
-            attributes: {},
-            uniforms: {}
-        };
+        this.sceneFramebuffer = this.framebuffer.framebuffer;
+        this.sceneTexture = this.framebuffer.texture;
     }
 
 
-    // ============================================================
-    // FRAMEBUFFER
-    // ============================================================
-
-    createSceneFramebuffer() {
-
-        const gl = this.gl;
-
-        this.sceneFramebuffer = gl.createFramebuffer();
-        this.sceneTexture = gl.createTexture();
-
-        gl.bindTexture(gl.TEXTURE_2D, this.sceneTexture);
-
-        gl.texParameteri(
-            gl.TEXTURE_2D,
-            gl.TEXTURE_MIN_FILTER,
-            gl.NEAREST
-        );
-
-        gl.texParameteri(
-            gl.TEXTURE_2D,
-            gl.TEXTURE_MAG_FILTER,
-            gl.NEAREST
-        );
-
-        gl.texParameteri(
-            gl.TEXTURE_2D,
-            gl.TEXTURE_WRAP_S,
-            gl.CLAMP_TO_EDGE
-        );
-
-        gl.texParameteri(
-            gl.TEXTURE_2D,
-            gl.TEXTURE_WRAP_T,
-            gl.CLAMP_TO_EDGE
-        );
-
-        gl.bindFramebuffer(
-            gl.FRAMEBUFFER,
-            this.sceneFramebuffer
-        );
-
-        gl.framebufferTexture2D(
-            gl.FRAMEBUFFER,
-            gl.COLOR_ATTACHMENT0,
-            gl.TEXTURE_2D,
-            this.sceneTexture,
-            0
-        );
-
-        this.resizeSceneFramebuffer();
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    }
-
-
-    resizeSceneFramebuffer() {
-
-        const gl = this.gl;
-
-        const rect = this.canvas.getBoundingClientRect();
-
-        const dpr = window.devicePixelRatio || 1;
-
-        const width = Math.round(rect.width * dpr);
-        const height = Math.round(rect.height * dpr);
-
-        if (width <= 0 || height <= 0) return;
-
-
-        const sizeChanged =
-            this.sceneWidth !== width ||
-            this.sceneHeight !== height;
-
-
-        // Always synchronize canvas backing dimensions.
-        if (
-            this.canvas.width !== width ||
-            this.canvas.height !== height
-        ) {
-            this.canvas.width = width;
-            this.canvas.height = height;
-        }
-
-        if (!sizeChanged) return;
-
-
-        // Resize scene texture.
-        gl.bindTexture(
-            gl.TEXTURE_2D,
-            this.sceneTexture
-        );
-
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.RGBA8,
-            width,
-            height,
-            0,
-            gl.RGBA,
-            gl.UNSIGNED_BYTE,
-            null
-        );
-
-
-        // Verify framebuffer.
-        gl.bindFramebuffer(
-            gl.FRAMEBUFFER,
-            this.sceneFramebuffer
-        );
-
-        if (
-            gl.checkFramebufferStatus(gl.FRAMEBUFFER) !==
-            gl.FRAMEBUFFER_COMPLETE
-        ) {
-            throw new Error("Scene framebuffer is incomplete.");
-        }
-
-
-        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-
-
-        this.sceneWidth = width;
-        this.sceneHeight = height;
-
-
-        gl.viewport(
-            0,
-            0,
-            this.sceneWidth,
-            this.sceneHeight
-        );
-    }
-
-
-    // ============================================================
-    // UNIFORMS
-    // ============================================================
-
-    uploadShaderSettings(settings, shader) {
-
-        const gl = this.gl;
-
-        for (const attribute of settings.attributes) {
-
-            shader.attributes[attribute] =
-                gl.getAttribLocation(
-                    shader.program,
-                    attribute
-                );
-        }
-
-        for (const [name, config] of Object.entries(settings.uniforms)) {
-
-            shader.uniforms[name] = {
-
-                location: gl.getUniformLocation(
-                    shader.program,
-                    name
-                ),
-
-                type: config.type
-            };
-
-            if (config.value !== undefined) {
-
-                this.uploadUniforms(shader, {
-                    [name]: config.value
-                });
-            }
-        }
-    }
-
-
-    uploadUniforms(program, values) {
-
-        const gl = this.gl;
-
-        gl.useProgram(program.program);
-
-        for (const [name, value] of Object.entries(values)) {
-
-            const uniform = program.uniforms[name];
-
-            if (!uniform || uniform.location === null) continue;
-
-            gl[`uniform${uniform.type}`](
-                uniform.location,
-                value
-            );
-        }
-    }
-
-
-    // ============================================================
-    // TEXTURES
-    // ============================================================
 
     load_render_texture(path) {
 
         return loadTexture(this.gl, path);
     }
 
-
-    createDarkTexture() {
-
-        const gl = this.gl;
-
-        const texture = gl.createTexture();
-
-        gl.bindTexture(gl.TEXTURE_2D, texture);
-
-        gl.texImage2D(
-            gl.TEXTURE_2D,
-            0,
-            gl.RGBA,
-            1,
-            1,
-            0,
-            gl.RGBA,
-            gl.UNSIGNED_BYTE,
-            new Uint8Array([0, 0, 0, 255])
-        );
-
-        gl.texParameteri(
-            gl.TEXTURE_2D,
-            gl.TEXTURE_MIN_FILTER,
-            gl.NEAREST
-        );
-
-        gl.texParameteri(
-            gl.TEXTURE_2D,
-            gl.TEXTURE_MAG_FILTER,
-            gl.NEAREST
-        );
-
-        return texture;
-    }
-
-
-    // ============================================================
-    // GEOMETRY
-    // ============================================================
 
     renderQuad(shader, vertices) {
 
@@ -678,61 +397,24 @@ export class Renderer {
     }
 
 
-    createQuadVertices(left, top, right, bottom) {
-
-        return new Float32Array([
-
-            left,  top,       0, 1,
-            right, top,       1, 1,
-            left,  bottom,    0, 0,
-
-            left,  bottom,    0, 0,
-            right, top,       1, 1,
-            right, bottom,    1, 0
-
-        ]);
-    }
-
-
-    createFullscreenQuad() {
-
-        return new Float32Array([
-
-            -1,  1,  0, 1,
-             1,  1,  1, 1,
-            -1, -1,  0, 0,
-
-            -1, -1,  0, 0,
-             1,  1,  1, 1,
-             1, -1,  1, 0
-
-        ]);
-    }
-
-
-    // ============================================================
-    // BACKGROUND
-    // ============================================================
-
-    renderSprite(sprite, camera = null) {
+    renderBackground(background, camera = null) {
 
         const gl = this.gl;
         const shader = this.backgroundProgram;
 
-        if (!sprite.texture) return;
 
-        const vertices = this.createQuadVertices(
+        const vertices = createQuadVertices(
             0,
             0,
-            this.sceneWidth,
-            this.sceneHeight
+            this.framebuffer.width,
+            this.framebuffer.height
         );
 
-        this.uploadUniforms(shader, {
+        uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.sceneWidth,
-                this.sceneHeight
+                this.framebuffer.width,
+                this.framebuffer.height
             ],
 
             u_texture: 0,
@@ -752,13 +434,13 @@ export class Renderer {
                 : 1,
 
             u_backgroundPosition: [
-                sprite.x,
-                sprite.y
+                background.x,
+                background.y
             ],
 
             u_backgroundSize: [
-                sprite.width,
-                sprite.height
+                background.width,
+                background.height
             ]
         });
 
@@ -766,16 +448,12 @@ export class Renderer {
 
         gl.bindTexture(
             gl.TEXTURE_2D,
-            sprite.texture
+            background.texture
         );
 
         this.renderQuad(shader, vertices);
     }
 
-
-    // ============================================================
-    // PLAYER
-    // ============================================================
 
     renderPlayer(player, camera) {
 
@@ -784,8 +462,8 @@ export class Renderer {
         const cameraPosition = camera
             ? { x: camera.x, y: camera.y }
             : {
-                x: this.sceneWidth * 0.5,
-                y: this.sceneHeight * 0.5
+                x: this.framebuffer.width * 0.5,
+                y: this.framebuffer.height * 0.5
             };
 
         const zoom = camera ? camera.zoom : 1.0;
@@ -834,19 +512,19 @@ export class Renderer {
         ];
 
 
-        const vertices = this.createQuadVertices(
+        const vertices = createQuadVertices(
             0,
             0,
-            this.sceneWidth,
-            this.sceneHeight
+            this.framebuffer.width,
+            this.framebuffer.height
         );
 
 
-        this.uploadUniforms(shader, {
+        uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.sceneWidth,
-                this.sceneHeight
+                this.framebuffer.width,
+                this.framebuffer.height
             ],
 
             u_cameraPosition: [
@@ -881,10 +559,6 @@ export class Renderer {
     }
 
 
-    // ============================================================
-    // FILAMENT
-    // ============================================================
-
     renderFilament(player, orb, camera) {
 
         const shader = this.filamentProgram;
@@ -900,24 +574,24 @@ export class Renderer {
         };
 
 
-        const vertices = this.createQuadVertices(
+        const vertices = createQuadVertices(
             0,
             0,
-            this.sceneWidth,
-            this.sceneHeight
+            this.framebuffer.width,
+            this.framebuffer.height
         );
 
 
-        this.uploadUniforms(shader, {
+        uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.sceneWidth,
-                this.sceneHeight
+                this.framebuffer.width,
+                this.framebuffer.height
             ],
 
             u_size: [
-                this.sceneWidth,
-                this.sceneHeight
+                this.framebuffer.width,
+                this.framebuffer.height
             ],
 
             u_start: [start.x, start.y],
@@ -940,11 +614,6 @@ export class Renderer {
         this.renderQuad(shader, vertices);
     }
 
-
-    // ============================================================
-    // ORBS
-    // ============================================================
-
     renderOrb(orb, camera) {
 
         const shader = this.orbProgram;
@@ -955,7 +624,7 @@ export class Renderer {
         ) * 0.42;
 
 
-        const segments = 48;
+        const segments = 12;
 
         let left = Infinity;
         let right = -Infinity;
@@ -983,7 +652,7 @@ export class Renderer {
         }
 
 
-        const padding = 8;
+        const padding = 20;
 
         left -= padding;
         right += padding;
@@ -1000,7 +669,7 @@ export class Renderer {
         };
 
 
-        const vertices = this.createQuadVertices(
+        const vertices = createQuadVertices(
             left,
             top,
             right,
@@ -1008,11 +677,11 @@ export class Renderer {
         );
 
 
-        this.uploadUniforms(shader, {
+        uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.sceneWidth,
-                this.sceneHeight
+                this.framebuffer.width,
+                this.framebuffer.height
             ],
 
             u_size: [width, height],
@@ -1025,8 +694,8 @@ export class Renderer {
             ],
 
             u_screenCenter: [
-                this.sceneWidth * 0.5,
-                this.sceneHeight * 0.5
+                this.framebuffer.width * 0.5,
+                this.framebuffer.height * 0.5
             ],
 
             u_cameraPosition: [
@@ -1055,11 +724,6 @@ export class Renderer {
 
         this.renderQuad(shader, vertices);
     }
-
-
-    // ============================================================
-    // FINAL DITHERING PASS
-    // ============================================================
 
     renderDithering() {
 
@@ -1097,10 +761,10 @@ export class Renderer {
             this.sceneTexture
         );
 
-        const vertices = this.createFullscreenQuad();
+        const vertices = createFullscreenQuad();
 
 
-        this.uploadUniforms(shader, {
+        uploadUniforms(this.gl, shader, {
 
             u_texture: 0,
 
@@ -1109,8 +773,8 @@ export class Renderer {
             u_ditherScale: 1.0,
 
             u_resolution: [
-                this.sceneWidth,
-                this.sceneHeight
+                this.framebuffer.width,
+                this.framebuffer.height
             ]
 
         });
@@ -1121,73 +785,17 @@ export class Renderer {
     }
 
 
+    renderGameplay(level, player, camera) {
 
-    render(level, player, camera) {
-
-        const gl = this.gl;
-
-        const rect = this.canvas.getBoundingClientRect();
-
-        const dpr = window.devicePixelRatio || 1;
-
-        const width = Math.round(rect.width * dpr);
-
-        const height = Math.round(rect.height * dpr);
-
-        if (
-            this.sceneWidth !== width ||
-            this.sceneHeight !== height
-        ) {
-            this.resizeSceneFramebuffer();
-        }
-
-        gl.bindFramebuffer(
-            gl.FRAMEBUFFER,
-            this.sceneFramebuffer
-        );
-
-        gl.viewport(
-            0,
-            0,
-            this.sceneWidth,
-            this.sceneHeight
-        );
-
-        gl.enable(gl.BLEND);
-
-        gl.blendFunc(
-            gl.SRC_ALPHA,
-            gl.ONE_MINUS_SRC_ALPHA
-        );
-
-        gl.clearColor(0, 0, 0, 1);
-
-        gl.clear(gl.COLOR_BUFFER_BIT);
-
-
-        this.renderSprite(
-            level.background,
-            camera
-        );
-
+        this.renderBackground(level.background, camera);
 
         for (const orb of level.orbs) {
-
-            this.renderOrb(
-                orb,
-                camera
-            );
+            this.renderOrb(orb, camera);
         }
 
-
-        this.renderPlayer(
-            player,
-            camera
-        );
-
+        this.renderPlayer(player, camera);
 
         if (player.engaged && player.engagedOrb) {
-
             this.renderFilament(
                 player,
                 player.engagedOrb,
@@ -1195,8 +803,196 @@ export class Renderer {
             );
         }
 
-        this.renderDithering();
+    }
 
+    renderGameplayButtons(buttons, gameState) {
+
+        this.gameplayButtons = buttons;
+
+        const shader = this.gameplayButtonsProgram;
+
+        const vertices = createQuadVertices(
+            0,
+            0,
+            this.framebuffer.width,
+            this.framebuffer.height
+        );
+
+
+        uploadUniforms(this.gl, shader, {
+
+            u_resolution: [
+                this.framebuffer.width,
+                this.framebuffer.height
+            ],
+
+            u_center: [
+                this.framebuffer.width * 0.5,
+                this.framebuffer.height * 0.5
+            ],
+
+            u_boundaryRadius: buttons.boundaryRadius,
+
+            u_horizontalOffset: buttons.horizontalOffset,
+
+            u_verticalOffset: buttons.verticalOffset,
+
+            u_menuHovered: buttons.buttons.menu.hovered ? 1 : 0,
+
+            u_menuPressed: buttons.buttons.menu.pressed ? 1 : 0,
+
+            u_settingsHovered: buttons.buttons.settings.hovered ? 1 : 0,
+
+            u_settingsPressed: buttons.buttons.settings.pressed ? 1 : 0,
+
+            u_restartHovered: buttons.buttons.restart.hovered ? 1 : 0,
+
+            u_restartPressed: buttons.buttons.restart.pressed ? 1 : 0,
+
+            u_pauseHovered: buttons.buttons.pause.hovered ? 1 : 0,
+
+            u_pausePressed: buttons.buttons.pause.pressed ? 1 : 0,
+
+            u_iconRadius: buttons.circles.menu.radius,
+
+            u_menuPosition: [
+                buttons.circles.menu.x,
+                buttons.circles.menu.y
+            ],
+
+            u_settingsPosition: [
+                buttons.circles.settings.x,
+                buttons.circles.settings.y
+            ],
+
+            u_restartPosition: [
+                buttons.circles.restart.x,
+                buttons.circles.restart.y
+            ],
+
+            u_pausePosition: [
+                buttons.circles.pause.x,
+                buttons.circles.pause.y
+            ],
+
+            u_isPaused: gameState === "PAUSED" ? 1 : 0,
+
+            u_inSettings: gameState === "SETTINGS" ? 1 : 0,
+
+            u_inMainMenu: gameState === "MAIN_MENU" ? 1 : 0,
+
+        });
+
+        this.renderQuad(shader, vertices);
 
     }
+
+    renderPlaying(game) {
+
+        this.renderGameplay(
+            game.level,
+            game.player,
+            game.camera
+        );
+
+        this.renderGameplayButtons(
+            game.gameplayButtons,
+            game.stateManager.current
+        );
+
+    }
+
+
+    renderMainMenu(game) {
+        this.renderGameplayButtons(
+            game.gameplayButtons,
+            game.stateManager.current
+        );
+
+    }
+
+
+    renderSettings(game) {
+        this.renderGameplayButtons(
+            game.gameplayButtons,
+            game.stateManager.current
+        );
+
+    }
+
+
+    renderLoading(game) {
+
+    }
+
+
+    renderPaused(game) {
+        this.renderPlaying(game);
+
+    }
+
+
+    renderLevelFailed(game) {
+
+    }
+
+
+    renderLevelCompleted(game) {
+
+    }
+
+    render(game) {
+
+        const width = this.framebuffer.width;
+        const height = this.framebuffer.height;
+
+        resizeFramebuffer(
+            this.gl,
+            this.canvas,
+            this.framebuffer
+        );
+
+        if (
+            width !== this.framebuffer.width ||
+            height !== this.framebuffer.height
+        ) {
+            game.gameplayButtons.updateLayout();
+        }
+
+        beginScene(this.gl, this.framebuffer);
+
+        switch (game.stateManager.current) {
+
+            case "PLAYING":
+                this.renderPlaying(game);
+                break;
+
+            case "MAIN_MENU":
+                this.renderMainMenu(game);
+                break;
+
+            case "SETTINGS":
+                this.renderSettings(game);
+                break;
+
+            case "LOADING":
+                this.renderLoading(game);
+                break;
+
+            case "PAUSED":
+                this.renderPaused(game);
+                break;
+
+            case "LEVEL_FAILED":
+                this.renderLevelFailed(game);
+                break;
+
+            case "LEVEL_COMPLETED":
+                this.renderLevelCompleted(game);
+                break;
+        }
+
+        this.renderDithering();
+    }
+
 }

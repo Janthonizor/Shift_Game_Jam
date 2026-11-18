@@ -1,6 +1,9 @@
+
 import { Camera } from "../Rendering/Camera.js";
-import {Physics } from "./Physics.js"
+import { Physics } from "./Physics.js";
 import { OrbSpatialGrid } from "./OrbSpatialGrid.js";
+import { GameState, GameStateManager } from "./GameState.js";
+import { GameplayButtons } from "../UI/GameplayButtons.js";
 
 
 export class Game {
@@ -8,10 +11,29 @@ export class Game {
     constructor(renderer) {
 
         this.renderer = renderer;
+        this.stateManager = new GameStateManager();
+
+        this.gameplayButtons = new GameplayButtons(renderer.canvas);
+        this.gameplayButtons.onButtonClick = (id) => {
+            this.handleGameplayButtonClick(id);
+        };
 
         this.orb_texture = null;
-
         this.checkpoint_texture = null;
+
+        this.performance = {
+            frameTime: 0,
+            frameInterval: 0,
+            averageFrameTime: 0,
+            minFrameTime: Infinity,
+            maxFrameTime: 0,
+            fps: 0,
+            totalFrameTime: 0,
+            frameCount: 0,
+        };
+
+        this.targetFrameTime = 1000 / 60;
+        this.lastFrameTime = null;
 
         this.player = {
             x: 32,
@@ -20,11 +42,11 @@ export class Game {
             width: 128,
             height: 128,
 
-            mass: 150,
-            moveForce: 100,
+            mass: 200,
+            moveForce: 1000,
             drag: 15,
             bounciness: 0.9,
-            maxSpeed: 1200,
+            maxSpeed: 1300,
 
             vx: 100,
             vy: 100,
@@ -38,7 +60,7 @@ export class Game {
             prevVx: 0,
             prevVy: 0,
 
-            orbRange: 450,
+            orbRange: 650,
             engaged: false,
             engagedOrb: null,
 
@@ -46,28 +68,40 @@ export class Game {
             showBorder: true,
         };
 
-        this.player.speed = Math.hypot(this.player.vx, this.player.vy);
+        this.player.speed = Math.hypot(
+            this.player.vx,
+            this.player.vy
+        );
 
-        this.camera = new Camera(renderer.canvas.width, renderer.canvas.height);
+        this.camera = new Camera(
+            renderer.canvas.width,
+            renderer.canvas.height
+        );
 
-        this.camera.set_position(this.player.x, this.player.y);
+        this.camera.set_position(
+            this.player.x,
+            this.player.y
+        );
 
-        this.physics = new Physics()
+        this.physics = new Physics();
 
         this.level = {
 
             background: {
                 x: 5000,
-                y: 5000, 
+                y: 5000,
                 width: 10000,
-                height: 10000
+                height: 10000,
+                texture: null
             },
 
-            //testing level of randomly shifted 12 x 12 grid
+            // Testing level of randomly shifted 12 x 12 grid.
             orbs: Array.from({ length: 12 * 12 }, (_, i) => {
+
                 const columns = 12;
                 const spacing = 800;
                 const offset = 400;
+
                 const col = i % columns;
                 const row = Math.floor(i / columns);
 
@@ -77,19 +111,19 @@ export class Game {
 
                     width: 200,
                     height: 200,
+
                     texture: null,
                     inRange: false,
                     alignment: 0,
                     spinAngle: 0
                 };
+
             }),
 
-            //eventually add checkpoints and potentially other interactive elements
             checkpoints: [],
         };
 
         this.orbGrid = new OrbSpatialGrid(256);
-
         this.orbGrid.build(this.level.orbs);
 
         this.nearbyOrbs = [];
@@ -100,41 +134,58 @@ export class Game {
             s: false,
             d: false,
             shift: false,
-            g: false,
+        };
+
+        this.keys = {
+            shiftPressed: false,
+            gPressed: false,
+        };
+
+        this.renderer.ditheringEnabled = true;
+
+        this.setupInput();
+
+        this.running = false;
+    }
+
+
+    handleGameplayButtonClick(id) {
+
+        if (id !== "pause") return;
+
+        if (this.stateManager.is(GameState.PLAYING)) {
+            this.changeState(GameState.PAUSED);
+        }
+        else if (this.stateManager.is(GameState.PAUSED)) {
+            this.changeState(GameState.PLAYING);
         }
 
-        let shiftPressed = false;
+    }
 
-        let gPressed = false;
+
+    setupInput() {
 
         window.addEventListener("keydown", (event) => {
+
             const key = event.key.toLowerCase();
 
-            if (key === "shift") {
+            if (key === "g") {
 
-                if (!shiftPressed) {
+                if (!this.keys.gPressed) {
+                    this.renderer.ditheringEnabled =
+                        !this.renderer.ditheringEnabled;
 
-                    if (this.input.shift) {
-                        this.input.shift = false;
-                    }
-
-                    else if (this.nearbyOrbs.length > 0) {
-                        this.input.shift = true;
-                    }
-
-                    shiftPressed = true;
+                    this.keys.gPressed = true;
                 }
 
                 event.preventDefault();
-
                 return;
             }
 
-            if (key == "g"){
-                if (!gPressed) {
-                    this.input.g = !this.input.g;
-                    gPressed = true
-                }
+            if (key === "shift") {
+                this.input.shift = true;
+                this.keys.shiftPressed = true;
+
                 event.preventDefault();
                 return;
             }
@@ -143,19 +194,27 @@ export class Game {
                 this.input[key] = true;
                 event.preventDefault();
             }
+
         });
 
+
         window.addEventListener("keyup", (event) => {
+
             const key = event.key.toLowerCase();
 
             if (key === "shift") {
-                shiftPressed = false;
+
+                this.keys.shiftPressed = false;
+                this.input.shift = false;
+
                 event.preventDefault();
                 return;
             }
 
             if (key === "g") {
-                gPressed = false;
+
+                this.keys.gPressed = false;
+
                 event.preventDefault();
                 return;
             }
@@ -164,7 +223,9 @@ export class Game {
                 this.input[key] = false;
                 event.preventDefault();
             }
+
         });
+
 
         this.renderer.canvas.addEventListener("wheel", (event) => {
 
@@ -174,19 +235,78 @@ export class Game {
 
         }, { passive: false });
 
-        this.running = false;
     }
-    
+
+
+    clearGameplayInput() {
+
+        for (const key of Object.keys(this.input)) {
+            this.input[key] = false;
+        }
+
+    }
+
+
+    changeState(nextState) {
+
+        if (this.stateManager.is(nextState)) return;
+
+        this.clearGameplayInput();
+
+        this.stateManager.change(nextState);
+
+        if (this.stateManager.isPlaying) {
+            this.input.shift = this.keys.shiftPressed;
+        }
+
+    }
+
 
     async start() {
 
-        this.level.background.texture = await this.renderer.load_render_texture(
-            "./Assets/grid_background.png"
-        );
+        this.level.background.texture =
+            await this.renderer.load_render_texture(
+                "./Assets/grid_background.png"
+            );
+
+        // Temporary: start directly in gameplay until the main menu exists.
+        this.changeState(GameState.PLAYING);
 
         this.running = true;
+        this.lastFrameTime = null;
 
         requestAnimationFrame(this.loop);
+
+    }
+
+
+    recordFrameTime(executionTime, frameInterval) {
+
+        const p = this.performance;
+
+        p.frameTime = executionTime;
+        p.frameInterval = frameInterval;
+
+        p.totalFrameTime += executionTime;
+        p.frameCount++;
+
+        p.averageFrameTime =
+            p.totalFrameTime / p.frameCount;
+
+        p.minFrameTime = Math.min(
+            p.minFrameTime,
+            executionTime
+        );
+
+        p.maxFrameTime = Math.max(
+            p.maxFrameTime,
+            executionTime
+        );
+
+        p.fps = frameInterval > 0
+            ? 1000 / frameInterval
+            : 0;
+
     }
 
 
@@ -194,29 +314,37 @@ export class Game {
 
         if (!this.running) return;
 
-        if (!this.lastTime) {
-            this.lastTime = timestamp;
+        if (this.lastFrameTime === null) {
+            this.lastFrameTime = timestamp;
+            requestAnimationFrame(this.loop);
+            return;
         }
 
-        const dt = Math.min(
-            (timestamp - this.lastTime) / 1000,
-            0.05
+        const frameStart = performance.now();
+
+        const elapsed = timestamp - this.lastFrameTime;
+        this.lastFrameTime = timestamp;
+
+
+        if (this.stateManager.isPlaying) {
+            this.update(elapsed/1000);
+        }
+        this.updateCamera(
+            elapsed / 1000,
+            this.stateManager.isPlaying
         );
 
-        this.lastTime = timestamp;
+        this.renderer.render(this);
 
-        this.update(dt);
+        const executionTime = performance.now() - frameStart;
 
-        this.renderer.ditheringEnabled = !this.input.g;
-
-        this.renderer.render(
-            this.level,
-            this.player,
-            this.camera
-        );
+        this.recordFrameTime(executionTime, elapsed);
 
         requestAnimationFrame(this.loop);
-    }
+
+    };
+
+
 
 
     updateValidOrbs() {
@@ -227,19 +355,20 @@ export class Game {
             this.player.orbRange
         );
 
-
     }
 
 
     updateOrbInteractions(dt) {
 
-        const speed = Math.hypot(this.player.vx, this.player.vy);
+        const speed = Math.hypot(
+            this.player.vx,
+            this.player.vy
+        );
 
         for (const orb of this.level.orbs) {
             orb.inRange = false;
             orb.alignment = 0;
         }
-
 
         let activeOrb = this.physics.engagedOrb;
 
@@ -251,17 +380,19 @@ export class Game {
 
                 const dx = this.player.x - entry.orb.x;
                 const dy = this.player.y - entry.orb.y;
+
                 const distanceSq = dx * dx + dy * dy;
 
                 if (distanceSq < closestDistanceSq) {
                     closestDistanceSq = distanceSq;
                     activeOrb = entry.orb;
                 }
+
             }
+
         }
 
         if (activeOrb === null) return;
-
 
         const dx = this.player.x - activeOrb.x;
         const dy = this.player.y - activeOrb.y;
@@ -276,7 +407,6 @@ export class Game {
             this.player.vx * -dy / distance +
             this.player.vy * dx / distance;
 
-
         activeOrb.alignment = speed > 0.001
             ? Math.abs(tangentialVelocity) / speed
             : 0;
@@ -284,23 +414,31 @@ export class Game {
         const angularVelocity = tangentialVelocity / distance;
 
         activeOrb.spinAngle += angularVelocity * dt;
+
     }
 
 
-    updateCamera(dt) {
+    updateCamera(dt, followPlayer = true) {
 
-        this.camera.reset_size(this.renderer.canvas.width, this.renderer.canvas.height);
-
-        this.camera.set_target_position(
-            this.player.x - this.player.vx * this.camera.lookBehind,
-            this.player.y - this.player.vy * this.camera.lookBehind
+        this.camera.reset_size(
+            this.renderer.canvas.width,
+            this.renderer.canvas.height
         );
+        if (followPlayer) {
+            this.camera.set_target_position(
+                this.player.x - this.player.vx * this.camera.lookBehind,
+                this.player.y - this.player.vy * this.camera.lookBehind
+            );
+            this.camera.move_toward_target_position(dt);
+        }
 
-        this.camera.move_toward_target_position(dt);
+        
+
     }
 
 
     update(dt) {
+
         this.updateValidOrbs();
 
         this.physics.update(
@@ -315,10 +453,6 @@ export class Game {
 
         this.updateOrbInteractions(dt);
 
-        this.updateCamera(dt);
-
     }
 
-
 }
-

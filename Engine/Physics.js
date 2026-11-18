@@ -4,33 +4,34 @@ export class Physics {
     constructor() {
         this.orb_capture_distance = null;
         this.engagedOrb = null;
-        this.springCaptureMultiplier = 0.2;
-        this.springStiffness = 5000;
-        this.tangentialOrbForce = 20000;
-        this.springDamping = 2000;
 
+        this.springCaptureMultiplier = 0.2;
+        this.springStiffness = 8000;
+        this.orbTorque = 40000000;
+        this.springDamping = 700;
     }
 
-    calculateOrbForce(player, orb) {
+
+    calculateOrbForce(player, orb, dt) {
 
         const dx = orb.x - player.x;
         const dy = orb.y - player.y;
 
         const distance = Math.hypot(dx, dy);
 
-        if (distance === 0) return { fx: 0, fy: 0 };
+        if (distance === 0) {
+            return { fx: 0, fy: 0 };
+        }
 
         // Radial direction
         const dirX = dx / distance;
         const dirY = dy / distance;
 
-        // Tangential direction
-        const rotation = dirX * player.vy - dirY * player.vx;
+        // Fixed tangential direction
+        const tangentX = -dirY;
+        const tangentY = dirX;
 
-        const direction = rotation >= 0 ? 1 : -1;
-
-        const tangentX = -dirY * direction;
-        const tangentY = dirX * direction;
+        // Radial spring
         const stretch = distance - this.orb_capture_distance;
         const radialVelocity = player.vx * dirX + player.vy * dirY;
 
@@ -39,21 +40,38 @@ export class Physics {
 
         const radialForce = spring - damper;
 
-        const tangentialMultiplier = Math.min(
-            1.0 / (distance**2)*100000,
-            3
-        );
+        // Orb motor
+        const tangentialVelocity =
+            player.vx * tangentX + player.vy * tangentY;
 
-        const tangentialForce =
-            this.tangentialOrbForce * tangentialMultiplier;
-        
+        const angularVelocity = tangentialVelocity / distance;
+
+        const momentOfInertia = player.mass * distance ** 2;
+
+        const torque = Math.sign(angularVelocity) * this.orbTorque;
+
+        const angularAcceleration = torque / momentOfInertia;
+
+        const newAngularVelocity =
+            angularVelocity + angularAcceleration * dt;
+
+        const tangentialAcceleration =
+            (newAngularVelocity - angularVelocity) * distance / dt;
+
+        const tangentialForce = tangentialAcceleration * player.mass;
+
         return {
             fx: dirX * radialForce + tangentX * tangentialForce,
-            fy: dirY * radialForce + tangentY * tangentialForce
+            fy: dirY * radialForce + tangentY * tangentialForce,
+            radialForce,
+            tangentialForce,
+            radialVelocity,
+            angularVelocity,
+            torque,
+            distance
         };
 
     }
-
 
     captureOrb(player, orbs) {
 
@@ -91,6 +109,7 @@ export class Physics {
         this.engagedOrb = null;
         this.orb_capture_distance = null;
         this.orbitDirection = 0;
+
         player.engaged = false;
         player.engagedOrb = null;
 
@@ -106,19 +125,18 @@ export class Physics {
         if (input.d) inputX += 1;
         if (input.w) inputY += 1;
         if (input.s) inputY -= 1;
+
         if (input.shift && this.engagedOrb == null) {
             this.captureOrb(player, orbs);
         }
+
         if (!input.shift && this.engagedOrb !== null) {
             this.disengageOrb(player);
         }
 
         const direction = player.direction ?? 0;
-
-
         const cos = Math.cos(direction);
         const sin = Math.sin(direction);
-        
 
         const rotatedInputX = inputY * cos - inputX * sin * 5;
         const rotatedInputY = inputY * sin + inputX * cos * 5;
@@ -133,7 +151,8 @@ export class Physics {
 
             const orbForce = this.calculateOrbForce(
                 player,
-                this.engagedOrb
+                this.engagedOrb,
+                dt
             );
 
             orbForceX = orbForce.fx;
@@ -152,28 +171,25 @@ export class Physics {
 
         player.vx += player.ax * dt;
         player.vy += player.ay * dt;
-
-        // Enforce maximum speed.
+        // Clamp maximum speed
         const speed = Math.hypot(player.vx, player.vy);
 
         if (speed > player.maxSpeed) {
-
             const scale = player.maxSpeed / speed;
-
             player.vx *= scale;
             player.vy *= scale;
-
         }
+
 
         player.speed = Math.hypot(player.vx, player.vy);
 
-        player.rippleDistance += player.speed/20 * dt;
+        player.rippleDistance += player.speed / 20 * dt;
 
-        // calculate direction of motion
         player.direction = Math.atan2(player.vy, player.vx);
 
         player.x += player.vx * dt;
         player.y += player.vy * dt;
+
     }
 
 
@@ -210,10 +226,12 @@ export class Physics {
             player.y = maxY;
             player.vy = -Math.abs(player.vy) * player.bounciness;
         }
+
     }
 
 
     update(player, input, bounds, orbs, dt) {
+
         this.updatePlayer(player, input, orbs, dt);
         this.constrainPlayer(player, bounds);
 
