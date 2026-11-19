@@ -20,9 +20,7 @@ uniform float u_viewRadius;
 uniform float u_playerRadius;
 uniform float u_rippleDistance;
 
-uniform vec4 u_color;
 
-uniform bool u_radialProjection;
 uniform bool u_hasTail;
 
 out vec4 outColor;
@@ -60,13 +58,6 @@ vec2 screenToWorld(vec2 screenPosition) {
         screenPosition - u_resolution * 0.5;
 
     float screenRadius = length(screenDelta);
-
-    // Linear camera projection.
-    if (!u_radialProjection) {
-
-        return u_cameraPosition +
-            screenDelta / max(u_zoom, 0.001);
-    }
 
     // Radial camera projection.
     float normalizedRadius =

@@ -9,21 +9,18 @@ uniform float u_boundaryRadius;
 uniform float u_horizontalOffset;
 uniform float u_verticalOffset;
 
-uniform bool u_enabled[4];
 uniform bool u_hovered[4];
 uniform bool u_pressed[4];
 
 uniform int u_icons[4];
 
-uniform float u_iconRadius;
+uniform float u_iconCircleRadius;
 uniform vec2 u_iconPositions[4];
 
 out vec4 outColor;
 
 
-// --------------------------------------------------
-// Drawing helpers
-// --------------------------------------------------
+// edge smoothing
 
 float softEdge(float distance, float threshold) {
 
@@ -36,6 +33,7 @@ float softEdge(float distance, float threshold) {
     );
 }
 
+// sdf primatives
 
 float drawLine(vec2 uv, vec2 a, vec2 b, float thickness) {
 
@@ -121,9 +119,7 @@ float drawFilledTriangle(vec2 uv, vec2 a, vec2 b, vec2 c) {
 }
 
 
-// --------------------------------------------------
-// Icon drawing functions
-// --------------------------------------------------
+// icon functions
 
 float drawMenuIcon(vec2 uv) {
 
@@ -263,13 +259,10 @@ float drawArrowIcon(vec2 uv, bool pointsRight) {
         return max(shaft, head);
 
     }
-
 }
 
 
-// --------------------------------------------------
-// Icon selection
-// --------------------------------------------------
+// icon decoding
 
 float drawIcon(vec2 uv, int iconType) {
 
@@ -302,21 +295,17 @@ float drawIcon(vec2 uv, int iconType) {
     }
 
     return 0.0;
-
 }
 
 
-// --------------------------------------------------
-// Main
-// --------------------------------------------------
-
 void main() {
 
-    // Convert fragment coordinates to top-left origin.
     vec2 screenPosition = vec2(
         gl_FragCoord.x,
         u_resolution.y - gl_FragCoord.y
     );
+
+    // get radial coordinates from center
 
     vec2 offset = screenPosition - u_center;
 
@@ -326,9 +315,7 @@ void main() {
     float distanceFromCenter = length(offset);
 
 
-    // --------------------------------------------------
-    // Identify button position
-    // --------------------------------------------------
+    // identify the four button square button regions
 
     bool topLeft =
         dx <= -u_horizontalOffset &&
@@ -346,6 +333,7 @@ void main() {
         dx >= u_horizontalOffset &&
         dy >= u_verticalOffset;
 
+    // assign an index to each button region
 
     int buttonIndex = -1;
 
@@ -366,59 +354,40 @@ void main() {
     }
 
 
-    // --------------------------------------------------
-    // Check button availability
-    // --------------------------------------------------
-
-    if (!u_enabled[buttonIndex]) {
-        discard;
-    }
-
-
-    // Clip to canvas and outside gameplay circle.
+    // cut the gameplay circle out of the 4 square button regions
+    // u_boundaryRadius is slightly larger than the gameplay area    
     bool outsideCircle =
         distanceFromCenter >= u_boundaryRadius;
 
-    bool insideCanvas =
-        screenPosition.x >= 0.0 &&
-        screenPosition.x <= u_resolution.x &&
-        screenPosition.y >= 0.0 &&
-        screenPosition.y <= u_resolution.y;
-
-    if (!outsideCircle || !insideCanvas) {
+    if (!outsideCircle) {
         discard;
     }
 
-
+    // read input for pressed and hovered button regions
     bool hovered = u_hovered[buttonIndex];
     bool pressed = u_pressed[buttonIndex];
 
+    // read which icon to draw in each button region
     int iconType = u_icons[buttonIndex];
 
+    // get a coordinate system centered on each icon circle
     vec2 iconPosition = u_iconPositions[buttonIndex];
 
 
-    // --------------------------------------------------
-    // Icon coordinates
-    // --------------------------------------------------
-
-    float iconScale = clamp(
-        1.0 + (40.0 / u_iconRadius) * 1.1,
-        0.5,
-        2.0
-    );
+    float iconScale = 1.7;
 
     vec2 iconUV =
         (screenPosition - iconPosition) /
-        (u_iconRadius * iconScale);
+        (u_iconCircleRadius * iconScale);
 
 
     float circleDistance = length(
         screenPosition - iconPosition
     );
 
+    //prepare for gradients around button edges and the icon circle edge
     float distanceToButtonCircle =
-        circleDistance - u_iconRadius;
+        circleDistance - u_iconCircleRadius;
 
     float distanceToCircle =
         distanceFromCenter - u_boundaryRadius;
@@ -440,8 +409,8 @@ void main() {
         abs(dy) - u_verticalOffset;
 
 
-    // Find nearest edge, excluding the button circle.
-    float pressedEdgeDistance = min(
+    // get the outer edge of the button
+    float outerEdgeDistance = min(
         distanceToCircle,
         min(
             min(distanceToOuterX, distanceToOuterY),
@@ -449,54 +418,49 @@ void main() {
         )
     );
 
-    // Include the button circle for full background shading.
+    // Include the button circle for full button shading.
     float edgeDistance = min(
-        pressedEdgeDistance,
+        outerEdgeDistance,
         distanceToButtonCircle
     );
 
 
-    // --------------------------------------------------
-    // Button background shading
-    // --------------------------------------------------
-
+    // establish button gradients
     float edgeWidth = 28.0;
 
-    float edgeStrength = 1.0 - smoothstep(
+    float edgeGradient = 1.0 - smoothstep(
         0.0,
         edgeWidth,
         edgeDistance
     );
 
-    float circleEdgeStrength = 1.0 - smoothstep(
+    float circleEdgeGradient = 1.0 - smoothstep(
         0.0,
         edgeWidth,
         distanceToButtonCircle
     );
 
-    float fillStrength = hovered ? 0.45 : 0.25;
-    vec3 fillColor = vec3(fillStrength);
+    // lighten the button when hovered
+    float fillValue = hovered ? 0.20 : 0.15;
 
-    float edgeColor = hovered ? 0.5 : 0.35;
+    vec3 fillColor = vec3(fillValue);
+
+    float edgeColor = hovered ? 0.45 : 0.35;
 
     vec3 finalColor = mix(
         fillColor,
         vec3(edgeColor),
-        edgeStrength
+        edgeGradient
     );
 
     // Darken toward the inner circle boundary.
     finalColor = mix(
         finalColor,
         vec3(0.0),
-        circleEdgeStrength
+        circleEdgeGradient
     );
 
-
-    // --------------------------------------------------
-    // Procedural icon
-    // --------------------------------------------------
-
+    // actually draw each icon using the coordinates centered on the icon circle
     float icon = drawIcon(iconUV, iconType);
 
     finalColor = mix(
@@ -505,37 +469,24 @@ void main() {
         icon
     );
 
-
-    // --------------------------------------------------
-    // Pressed border — draw last
-    // --------------------------------------------------
-
-    float pressedBorder = 0.0;
-
+    //darken the outer button edge when clicked
+    float pressedBorderValue = 0.0;
     if (pressed) {
 
-        pressedBorder = 1.0 - smoothstep(
+        pressedBorderValue = 1.0 - smoothstep(
             0.0,
             8.0,
-            pressedEdgeDistance
+            outerEdgeDistance
         );
 
         finalColor = mix(
             finalColor,
             vec3(0.0),
-            pressedBorder
+            pressedBorderValue
         );
 
     }
 
-
-    // --------------------------------------------------
-    // Output
-    // --------------------------------------------------
-
-    float alpha = mix(0.4, 0.85, edgeStrength);
-    alpha = max(alpha, pressedBorder);
-
-    outColor = vec4(finalColor, alpha);
+    outColor = vec4(finalColor, 1.0);
 
 }

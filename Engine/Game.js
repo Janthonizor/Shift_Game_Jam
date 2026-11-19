@@ -22,9 +22,10 @@ export class Game {
 
         this.gameplayButtons.onButtonClick = (id, action) => {
             this.handleGameplayButtonClick(id, action);
+
         };
 
-        this.updateButtonLayout();
+        this.updateButtonConfig();
 
         this.orb_texture = null;
         this.checkpoint_texture = null;
@@ -35,12 +36,11 @@ export class Game {
             x: null,
             y: null,
 
-            width: 128,
-            height: 128,
+            radius: 50,
 
             mass: 200,
             moveForce: 1000,
-            drag: 15,
+            drag: 35,
             bounciness: 0.9,
             maxSpeed: 1300,
 
@@ -106,7 +106,6 @@ export class Game {
 
 
     handleGameplayButtonClick(id, action) {
-
         switch (action) {
 
             case "toggleSettings":
@@ -250,7 +249,7 @@ export class Game {
 
         this.stateManager.change(nextState);
 
-        this.updateButtonLayout();
+        this.updateButtonConfig();
 
         if (this.stateManager.isPlaying) {
             this.input.shift = this.keys.shiftPressed;
@@ -258,6 +257,7 @@ export class Game {
 
     }
 
+    
     startLevel(levelId) {
         
         if (!this.levelManager.isUnlocked(levelId)) {
@@ -341,9 +341,6 @@ export class Game {
         requestAnimationFrame(this.loop);
 
     }
-
-
-
 
 
     loop = (timestamp) => {
@@ -468,7 +465,7 @@ export class Game {
     }
 
 
-    updateButtonLayout() {
+    updateButtonConfig() {
 
         const layout = {
             ...(ButtonLayouts[this.stateManager.current] ?? {})
@@ -476,10 +473,13 @@ export class Game {
 
         if (this.settingsOpen) {
 
-            layout.topLeft = {
-                icon: "menu",
-                action: "toggleSettings"
-            };
+            if (this.stateManager.current == GameState.MAIN_MENU){
+                layout.topLeft = {
+                    icon: "menu",
+                    action: "toggleSettings"
+                };
+            }
+
 
             layout.bottomLeft = {
                 icon: "previous",
@@ -493,9 +493,10 @@ export class Game {
 
         }
 
-        this.gameplayButtons.setLayout(layout);
+        this.gameplayButtons.configureButtons(layout);
 
     }
+
 
     toggleSettings() {
 
@@ -510,7 +511,7 @@ export class Game {
             return;
         }
 
-        this.updateButtonLayout();
+        this.updateButtonConfig();
 
     }
 

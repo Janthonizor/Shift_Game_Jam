@@ -43,9 +43,13 @@ export function resizeFramebuffer(gl, canvas, target) {
     const width = Math.round(rect.width * dpr);
     const height = Math.round(rect.height * dpr);
 
-    if (width <= 0 || height <= 0) return;
+    if (width <= 0 || height <= 0) {
+        return false;
+    }
 
-    if (target.width === width && target.height === height) return;
+    if (target.width === width && target.height === height) {
+        return false;
+    }
 
     canvas.width = width;
     canvas.height = height;
@@ -55,7 +59,7 @@ export function resizeFramebuffer(gl, canvas, target) {
     gl.texImage2D(
         gl.TEXTURE_2D,
         0,
-        gl.RGBA8,
+        gl.RGBA,
         width,
         height,
         0,
@@ -67,11 +71,13 @@ export function resizeFramebuffer(gl, canvas, target) {
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
 
     if (gl.checkFramebufferStatus(gl.FRAMEBUFFER) !== gl.FRAMEBUFFER_COMPLETE) {
-        throw new Error("Scene framebuffer is incomplete.");
+        throw new Error("Framebuffer is incomplete");
     }
 
     target.width = width;
     target.height = height;
+
+    return true;
 }
 
 

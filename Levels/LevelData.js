@@ -1,25 +1,27 @@
 
-export function createLevelData(definition) {
+export function createLevelData(levelTemplate) {
 
     return {
-        id: definition.id,
-        name: definition.name,
+        id: levelTemplate.id,
+        name: levelTemplate.name,
 
         background: {
-            ...definition.background,
+            ...levelTemplate.background,
             texture: null
         },
 
         start: {
-            position: { ...definition.start.position },
-            speed: { ...definition.start.speed }
+            position: { ...levelTemplate.start.position },
+            speed: { ...levelTemplate.start.speed }
         },
 
-        orbs: definition.createOrbs(),
+        orbs: levelTemplate.createOrbs(),
 
-        checkpoints: definition.checkpoints.map(
+        checkpoints: levelTemplate.checkpoints.map(
             checkpoint => ({ ...checkpoint })
         )
     };
 
 }
+
+

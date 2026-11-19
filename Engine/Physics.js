@@ -8,13 +8,14 @@ export class Physics {
         this.springCaptureMultiplier = 0.2;
         this.springStiffness = 8000;
         this.orbTorque = 20000000;
-        this.springDamping = 700;
+        this.springDamping = 2000;
     }
 
 
     calculateOrbForce(player, orb, dt) {
 
         const dx = orb.x - player.x;
+
         const dy = orb.y - player.y;
 
         const distance = Math.hypot(dx, dy);
@@ -23,24 +24,26 @@ export class Physics {
             return { fx: 0, fy: 0 };
         }
 
-        // Radial direction
         const dirX = dx / distance;
+
         const dirY = dy / distance;
 
-        // Fixed tangential direction
+
         const tangentX = -dirY;
+
         const tangentY = dirX;
 
-        // Radial spring
+    
         const stretch = distance - this.orb_capture_distance;
+
         const radialVelocity = player.vx * dirX + player.vy * dirY;
 
         const spring = this.springStiffness * stretch;
+
         const damper = this.springDamping * radialVelocity;
 
         const radialForce = spring - damper;
 
-        // Orb motor
         const tangentialVelocity =
             player.vx * tangentX + player.vy * tangentY;
 
@@ -62,13 +65,7 @@ export class Physics {
 
         return {
             fx: dirX * radialForce + tangentX * tangentialForce,
-            fy: dirY * radialForce + tangentY * tangentialForce,
-            radialForce,
-            tangentialForce,
-            radialVelocity,
-            angularVelocity,
-            torque,
-            distance
+            fy: dirY * radialForce + tangentY * tangentialForce
         };
 
     }
@@ -195,7 +192,7 @@ export class Physics {
 
     constrainPlayer(player, bounds) {
 
-        const radius = player.width / 2;
+        const radius = player.radius;
 
         const minX = bounds.x - bounds.width / 2 + radius;
         const maxX = bounds.x + bounds.width / 2 - radius;

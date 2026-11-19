@@ -1,6 +1,8 @@
 
 import { loadTexture } from "./Texture.js";
+
 import { ditheringSettings } from "./Dithering.js";
+
 import {
     createFramebuffer,
     resizeFramebuffer,
@@ -12,6 +14,7 @@ import {
     createQuadVertices,
     createFullscreenQuad
 } from "./Geometry.js";
+
 import {
     loadShader,
     createProgram,
@@ -122,9 +125,6 @@ export class Renderer {
                 u_playerRadius:     { type: "1f" },
                 u_rippleDistance:   { type: "1f" },
 
-                u_color:            { type: "4fv" },
-
-                u_radialProjection: { type: "1i" },
                 u_hasTail:          { type: "1i" }
             }
         };
@@ -168,15 +168,14 @@ export class Renderer {
                 u_resolution:       { type: "2fv" },
                 u_size:             { type: "2fv" },
 
-                u_start:            { type: "2fv" },
-                u_end:              { type: "2fv" },
+                u_playerPosition:   { type: "2fv" },
+                u_orbPosition:      { type: "2fv" },
 
                 u_cameraPosition:   { type: "2fv" },
                 u_zoom:             { type: "1f" },
                 u_compression:      { type: "1f" },
                 u_viewRadius:       { type: "1f" },
-                u_radialProjection: { type: "1i" },
-
+                
                 u_time:             { type: "1f" },
                 u_color:            { type: "4fv" }
             }
@@ -267,21 +266,21 @@ export class Renderer {
             ],
 
             uniforms: {
-                u_resolution:       { type: "2fv" },
-                u_center:           { type: "2fv" },
+                u_resolution:           { type: "2fv" },
+                u_center:               { type: "2fv" },
 
-                u_boundaryRadius:   { type: "1f" },
-                u_horizontalOffset: { type: "1f" },
-                u_verticalOffset:   { type: "1f" },
+                u_boundaryRadius:       { type: "1f" },
+                u_horizontalOffset:     { type: "1f" },
+                u_verticalOffset:       { type: "1f" },
 
-                u_iconRadius:       { type: "1f" },
+                u_iconCircleRadius:     { type: "1f" },
 
-                "u_enabled[0]":     { type: "1iv" },
-                "u_hovered[0]":     { type: "1iv" },
-                "u_pressed[0]":     { type: "1iv" },
-                "u_icons[0]":       { type: "1iv" },
+                "u_enabled[0]":         { type: "1iv" },
+                "u_hovered[0]":         { type: "1iv" },
+                "u_pressed[0]":         { type: "1iv" },
+                "u_icons[0]":           { type: "1iv" },
 
-                "u_iconPositions[0]": { type: "2fv" }
+                "u_iconPositions[0]":   { type: "2fv" }
             }
 
         };
@@ -324,10 +323,8 @@ export class Renderer {
 
         this.framebuffer = createFramebuffer(gl, canvas);
 
-        this.sceneFramebuffer = this.framebuffer.framebuffer;
         this.sceneTexture = this.framebuffer.texture;
     }
-
 
 
     load_render_texture(path) {
@@ -395,15 +392,15 @@ export class Renderer {
         const vertices = createQuadVertices(
             0,
             0,
-            this.framebuffer.width,
-            this.framebuffer.height
+            this.gl.drawingBufferWidth,
+            this.gl.drawingBufferHeight
         );
 
         uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                this.gl.drawingBufferWidth,
+                this.gl.drawingBufferHeight
             ],
 
             u_texture: 0,
@@ -448,99 +445,51 @@ export class Renderer {
 
         const shader = this.playerProgram;
 
-        const cameraPosition = camera
-            ? { x: camera.x, y: camera.y }
-            : {
-                x: this.framebuffer.width * 0.5,
-                y: this.framebuffer.height * 0.5
-            };
-
-        const zoom = camera ? camera.zoom : 1.0;
-
-        const compression = camera
-            ? camera.compression
-            : 1.0;
-
-        const viewRadius = camera
-            ? camera.viewRadius
-            : 1.0;
-
-        const radialProjection = camera
-            ? camera.radialProjection
-            : false;
-
-
-        const radius = Math.min(
-            player.width,
-            player.height
-        ) * 0.42;
-
-        const position = {
-            x: player.x,
-            y: player.y
-        };
-
-
-        const tail = calculateTangentPoints(
-            position,
-            radius,
-            cameraPosition
+        const tailPoints = calculateTangentPoints(
+            player,
+            camera
         );
-
-        const tailA = tail
-            ? [tail.a.x, tail.a.y]
-            : [position.x, position.y];
-
-        const tailB = tail
-            ? [tail.b.x, tail.b.y]
-            : [position.x, position.y];
-
-        const tailC = [
-            cameraPosition.x,
-            cameraPosition.y
-        ];
-
 
         const vertices = createQuadVertices(
             0,
             0,
-            this.framebuffer.width,
-            this.framebuffer.height
+            this.gl.drawingBufferWidth,
+            this.gl.drawingBufferHeight
         );
 
 
         uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                this.gl.drawingBufferWidth,
+                this.gl.drawingBufferHeight
             ],
 
             u_cameraPosition: [
-                cameraPosition.x,
-                cameraPosition.y
+                camera.x,
+                camera.y
             ],
 
             u_playerPosition: [
-                position.x,
-                position.y
+                player.x,
+                player.y
             ],
 
-            u_tailA: tailA,
-            u_tailB: tailB,
-            u_tailC: tailC,
+            u_tailA: tailPoints.a,
+            u_tailB: tailPoints.b,
+            u_tailC: [
+                camera.x,
+                camera.y
+            ],
 
-            u_zoom: zoom,
-            u_compression: compression,
-            u_viewRadius: viewRadius,
+            u_zoom: camera.zoom,
+            u_compression: camera.compression,
+            u_viewRadius: camera.viewRadius,
 
-            u_playerRadius: radius,
+            u_playerRadius: player.radius,
             u_rippleDistance: player.rippleDistance,
 
-            u_color: [1.0, 1.0, 1.0, 1.0],
-
-            u_radialProjection: radialProjection ? 1 : 0,
-            u_hasTail: tail ? 1 : 0
+            u_hasTail: tailPoints.hasTail
         });
 
 
@@ -552,39 +501,28 @@ export class Renderer {
 
         const shader = this.filamentProgram;
 
-        const start = {
-            x: player.x,
-            y: player.y
-        };
-
-        const end = {
-            x: orb.x,
-            y: orb.y
-        };
-
-
         const vertices = createQuadVertices(
             0,
             0,
-            this.framebuffer.width,
-            this.framebuffer.height
+            this.gl.drawingBufferWidth,
+            this.gl.drawingBufferHeight
         );
 
 
         uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                this.gl.drawingBufferWidth,
+                this.gl.drawingBufferHeight
             ],
 
             u_size: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                this.gl.drawingBufferWidth,
+                this.gl.drawingBufferHeight
             ],
 
-            u_start: [start.x, start.y],
-            u_end: [end.x, end.y],
+            u_playerPosition: [player.x, player.y],
+            u_orbPosition: [orb.x, orb.y],
 
             u_cameraPosition: [camera.x, camera.y],
 
@@ -592,7 +530,6 @@ export class Renderer {
             u_compression: camera.compression,
             u_viewRadius: camera.viewRadius,
 
-            u_radialProjection: camera.radialProjection ? 1 : 0,
 
             u_time: performance.now() * 0.001,
 
@@ -603,32 +540,32 @@ export class Renderer {
         this.renderQuad(shader, vertices);
     }
 
+
     renderOrb(orb, camera) {
 
         const shader = this.orbProgram;
 
-        const radius = Math.min(
-            orb.width,
-            orb.height
-        ) * 0.42;
+        const segments = 6;
 
+        let left = 1000.0;
+        let right = -1000.0;
+        let top = 1000.0;
+        let bottom = -1000.0;
 
-        const segments = 12;
-
-        let left = Infinity;
-        let right = -Infinity;
-        let top = Infinity;
-        let bottom = -Infinity;
+        let angle = 0.0;
+        let worldX = 0.0;
+        let worldY = 0.0;
+        let screen = { x: 0.0, y: 0.0 };
 
 
         for (let i = 0; i < segments; i++) {
 
-            const angle = (i / segments) * Math.PI * 2;
+            angle = (i / segments) * Math.PI * 2;
 
-            const worldX = orb.x + Math.cos(angle) * radius;
-            const worldY = orb.y + Math.sin(angle) * radius;
+            worldX = orb.x + Math.cos(angle) * orb.radius;
+            worldY = orb.y + Math.sin(angle) * orb.radius;
 
-            const screen = camera.worldToScreen(
+            screen = camera.worldToScreen(
                 worldX,
                 worldY
             );
@@ -669,8 +606,8 @@ export class Renderer {
         uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                this.gl.drawingBufferWidth,
+                this.gl.drawingBufferHeight
             ],
 
             u_size: [width, height],
@@ -683,8 +620,8 @@ export class Renderer {
             ],
 
             u_screenCenter: [
-                this.framebuffer.width * 0.5,
-                this.framebuffer.height * 0.5
+                this.gl.drawingBufferWidth * 0.5,
+                this.gl.drawingBufferHeight * 0.5
             ],
 
             u_cameraPosition: [
@@ -696,7 +633,7 @@ export class Renderer {
             u_compression: camera.compression,
             u_zoom: camera.zoom,
 
-            u_orbRadius: radius,
+            u_orbRadius: orb.radius,
 
             u_time: performance.now() * 0.001,
 
@@ -714,13 +651,11 @@ export class Renderer {
         this.renderQuad(shader, vertices);
     }
 
+    
     renderDithering() {
 
         const gl = this.gl;
         const shader = this.ditheringProgram;
-
-        const width = gl.drawingBufferWidth;
-        const height = gl.drawingBufferHeight;
 
 
         gl.bindFramebuffer(
@@ -731,8 +666,8 @@ export class Renderer {
         gl.viewport(
             0,
             0,
-            width,
-            height
+            gl.drawingBufferWidth,
+            gl.drawingBufferHeight
         );
 
         gl.disable(gl.BLEND);
@@ -762,8 +697,8 @@ export class Renderer {
             u_ditherScale: 1.0,
 
             u_resolution: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                gl.drawingBufferWidth,
+                gl.drawingBufferHeight
             ]
 
         });
@@ -794,50 +729,36 @@ export class Renderer {
 
     }
 
-    renderGameplayButtons(buttons) {
+
+    renderGameplayButtons(gameplayButtons) {
 
         const shader = this.gameplayButtonsProgram;
 
         const vertices = createQuadVertices(
             0,
             0,
-            this.framebuffer.width,
-            this.framebuffer.height
+            this.gl.drawingBufferWidth,
+            this.gl.drawingBufferHeight
         );
 
-        const buttonOrder = [
-            "topLeft",
-            "topRight",
-            "bottomLeft",
-            "bottomRight"
-        ];
-
-        const iconIDs = {
-            menu: 1,
-            settings: 2,
-            restart: 3,
-            play: 4,
-            pause: 5,
-            previous: 6,
-            next: 7
-        };
 
         const enabled = [];
         const hovered = [];
         const pressed = [];
         const icons = [];
         const positions = [];
+        let button, circle = null;
 
-        for (const id of buttonOrder) {
+        for (const id of Object.keys(gameplayButtons.buttons)) {
 
-            const button = buttons.buttons[id];
-            const circle = buttons.circles[id];
+            button = gameplayButtons.buttons[id];
+            circle = gameplayButtons.circles[id];
 
             enabled.push(button.enabled ? 1 : 0);
             hovered.push(button.hovered ? 1 : 0);
             pressed.push(button.pressed ? 1 : 0);
 
-            icons.push(iconIDs[button.icon] ?? 0);
+            icons.push(gameplayButtons.iconIDs[button.icon] ?? 0);
 
             positions.push(
                 circle.x,
@@ -849,20 +770,20 @@ export class Renderer {
         uploadUniforms(this.gl, shader, {
 
             u_resolution: [
-                this.framebuffer.width,
-                this.framebuffer.height
+                this.gl.drawingBufferWidth,
+                this.gl.drawingBufferHeight
             ],
 
             u_center: [
-                this.framebuffer.width * 0.5,
-                this.framebuffer.height * 0.5
+                this.gl.drawingBufferWidth * 0.5,
+                this.gl.drawingBufferHeight * 0.5
             ],
 
-            u_boundaryRadius: buttons.boundaryRadius,
-            u_horizontalOffset: buttons.horizontalOffset,
-            u_verticalOffset: buttons.verticalOffset,
+            u_boundaryRadius: gameplayButtons.boundaryRadius,
+            u_horizontalOffset: gameplayButtons.horizontalOffset,
+            u_verticalOffset: gameplayButtons.verticalOffset,
 
-            u_iconRadius: buttons.circles.topLeft.radius,
+            u_iconCircleRadius: gameplayButtons.circles.topLeft.radius,
 
             "u_enabled[0]": new Int32Array(enabled),
             "u_hovered[0]": new Int32Array(hovered),
@@ -873,9 +794,11 @@ export class Renderer {
 
         });
 
+
         this.renderQuad(shader, vertices);
 
     }
+
 
     renderPlaying(game) {
 
@@ -891,6 +814,7 @@ export class Renderer {
 
     }
 
+
     renderMainMenu(game) {
 
         this.renderGameplayButtons(
@@ -900,9 +824,7 @@ export class Renderer {
     }
 
 
-
     renderLoading(game) {
-
     }
 
 
@@ -913,29 +835,16 @@ export class Renderer {
 
 
     renderLevelFailed(game) {
-
     }
 
 
     renderLevelCompleted(game) {
-
     }
+
 
     render(game) {
 
-        const width = this.framebuffer.width;
-        const height = this.framebuffer.height;
-
-        resizeFramebuffer(
-            this.gl,
-            this.canvas,
-            this.framebuffer
-        );
-
-        if (
-            width !== this.framebuffer.width ||
-            height !== this.framebuffer.height
-        ) {
+        if (resizeFramebuffer(this.gl, this.canvas, this.framebuffer)) {
             game.gameplayButtons.updateLayout();
         }
 
@@ -972,3 +881,4 @@ export class Renderer {
     }
 
 }
+

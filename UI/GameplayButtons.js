@@ -1,3 +1,4 @@
+import {calculateButtonCircleRadius} from "../Rendering/Geometry.js";
 
 export class GameplayButtons {
 
@@ -45,17 +46,28 @@ export class GameplayButtons {
 
         };
 
+        this.iconIDs = {
+            menu: 1,
+            settings: 2,
+            restart: 3,
+            play: 4,
+            pause: 5,
+            previous: 6,
+            next: 7
+        };
+
+
         this.onButtonClick = null;
 
         // Geometry configuration
         this.boundaryMultiplier = 1.05;
-        this.horizontalOffsetMultiplier = 0.05;
-        this.verticalOffsetMultiplier = 0.05;
+        this.OffsetMultiplierX = 0.05;
+        this.OffsetMultiplierY = 0.05;
 
         // Mouse position (drawing-buffer coordinates)
         this.mouse = {
-            x: -1,
-            y: -1
+            x: this.canvas.width / 2,
+            y: this.canvas.height / 2
         };
 
         this.updateLayout();
@@ -104,16 +116,14 @@ export class GameplayButtons {
                 button.pressed = false;
             }
 
+            this.updateHover();
+
         });
 
     }
 
 
-    // --------------------------------------------------
-    // Button configuration
-    // --------------------------------------------------
-
-    setLayout(layout) {
+    configureButtons(layout) {
 
         for (const [id, button] of Object.entries(this.buttons)) {
 
@@ -130,14 +140,10 @@ export class GameplayButtons {
 
         }
 
-        this.clearHover();
+        this.updateHover();
 
     }
 
-
-    // --------------------------------------------------
-    // Mouse interaction
-    // --------------------------------------------------
 
     updateMousePosition(event) {
 
@@ -218,65 +224,6 @@ export class GameplayButtons {
     }
 
 
-    // --------------------------------------------------
-    // Button geometry
-    // --------------------------------------------------
-
-    calculateButtonCircle(width, height) {
-
-        const centerX = width * 0.5;
-        const centerY = height * 0.5;
-
-        const boundaryRadius =
-            Math.min(width, height) * 0.5 *
-            this.boundaryMultiplier;
-
-        const horizontalOffset =
-            width * 0.5 *
-            this.horizontalOffsetMultiplier;
-
-        const verticalOffset =
-            height * 0.5 *
-            this.verticalOffsetMultiplier;
-
-        let low = 0;
-
-        let high = Math.min(
-            (centerX - horizontalOffset) * 0.5,
-            (centerY - verticalOffset) * 0.5
-        );
-
-        for (let i = 0; i < 40; i++) {
-
-            const radius = (low + high) * 0.5;
-
-            const distanceFromCenter = Math.hypot(
-                centerX - radius,
-                centerY - radius
-            );
-
-            const fits =
-                distanceFromCenter >=
-                boundaryRadius + radius;
-
-            if (fits) {
-                low = radius;
-            }
-            else {
-                high = radius;
-            }
-
-        }
-
-        return {
-            x: low,
-            y: low,
-            radius: low
-        };
-
-    }
-
-
     updateLayout() {
 
         const width = this.canvas.width;
@@ -290,37 +237,43 @@ export class GameplayButtons {
             this.boundaryMultiplier;
 
         this.horizontalOffset =
-            width * 0.5 * this.horizontalOffsetMultiplier;
+            width * 0.5 * this.OffsetMultiplierX;
 
         this.verticalOffset =
-            height * 0.5 * this.verticalOffsetMultiplier;
+            height * 0.5 * this.OffsetMultiplierY;
 
-        const circle = this.calculateButtonCircle(width, height);
+        const circleRadius = calculateButtonCircleRadius(
+            width, 
+            height,
+            this.OffsetMultiplierX,
+            this.OffsetMultiplierY,
+            this.boundaryMultiplier
+        );
 
         this.circles = {
 
             topLeft: {
-                x: circle.x,
-                y: circle.y,
-                radius: circle.radius * 0.7
+                x: circleRadius,
+                y: circleRadius,
+                radius: circleRadius * 0.7
             },
 
             topRight: {
-                x: width - circle.x,
-                y: circle.y,
-                radius: circle.radius * 0.7
+                x: width - circleRadius,
+                y: circleRadius,
+                radius: circleRadius * 0.7
             },
 
             bottomLeft: {
-                x: circle.x,
-                y: height - circle.y,
-                radius: circle.radius * 0.7
+                x: circleRadius,
+                y: height - circleRadius,
+                radius: circleRadius * 0.7
             },
 
             bottomRight: {
-                x: width - circle.x,
-                y: height - circle.y,
-                radius: circle.radius * 0.7
+                x: width - circleRadius,
+                y: height - circleRadius,
+                radius: circleRadius * 0.7
             }
 
         };
@@ -328,3 +281,4 @@ export class GameplayButtons {
     }
 
 }
+

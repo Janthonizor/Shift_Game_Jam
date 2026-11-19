@@ -7,8 +7,8 @@ in vec2 v_texCoord;
 uniform vec2 u_resolution;
 
 uniform vec2 u_cameraPosition;
-uniform vec2 u_start;
-uniform vec2 u_end;
+uniform vec2 u_playerPosition;
+uniform vec2 u_orbPosition;
 
 uniform float u_time;
 uniform float u_zoom;
@@ -17,14 +17,10 @@ uniform float u_viewRadius;
 
 uniform vec4 u_color;
 
-uniform bool u_radialProjection;
-
 out vec4 outColor;
 
 
-// ============================================================
-// INVERSE CAMERA PROJECTION
-// ============================================================
+// camera projection
 
 vec2 screenToWorld(vec2 screenPosition) {
 
@@ -32,13 +28,6 @@ vec2 screenToWorld(vec2 screenPosition) {
         screenPosition - u_resolution * 0.5;
 
     float screenRadius = length(screenDelta);
-
-    // Linear camera projection.
-    if (!u_radialProjection) {
-
-        return u_cameraPosition +
-            screenDelta / max(u_zoom, 0.001);
-    }
 
     // Radial camera projection.
     float normalizedRadius =
@@ -64,12 +53,10 @@ vec2 screenToWorld(vec2 screenPosition) {
 }
 
 
-// ============================================================
-// LIGHTNING STRAND
-// ============================================================
+//generate a waving strand
 
 float strand(
-    float across,
+    float perpendicularDistance,
     float t,
     float baseOffset,
     float phase,
@@ -78,79 +65,62 @@ float strand(
     float thickness
 ) {
 
-    float envelope = sin(t * 3.14159265);
+    float bundleBulge = sin(t * 3.14159265);
 
     float wave =
         sin(t * frequency + u_time * 5.0 + phase * 7.0) * 0.65
         +
         sin(t * frequency * 2.3 - u_time * 8.0 + phase) * 0.25;
 
-    float offset = envelope * (
+    float offset = bundleBulge * (
         baseOffset + wave * amplitude
     );
 
-    float d = abs(across - offset);
+    float perpendicularDistanceToStrand = abs(perpendicularDistance - offset);
 
-    float taper = mix(0.15, 1.0, envelope);
+    float taper = mix(0.15, 1.0, bundleBulge);
 
-    return d - thickness * taper;
+    return perpendicularDistanceToStrand - thickness * taper;
 }
 
 
-// ============================================================
-// MAIN
-// ============================================================
 
 void main() {
 
-    // ========================================================
-    // SCREEN TO WORLD
-    // ========================================================
-
+    // establish coordinates
     vec2 screenPosition = vec2(
         gl_FragCoord.x,
         u_resolution.y - gl_FragCoord.y
     );
 
-    vec2 p = screenToWorld(screenPosition);
 
-    if (p.x > 1e19) discard;
+    vec2 worldPosition = screenToWorld(screenPosition);
 
 
-    // ========================================================
-    // WORLD-SPACE FILAMENT GEOMETRY
-    // ========================================================
+    vec2 filamentDirection = u_orbPosition - u_playerPosition;
 
-    vec2 direction = u_end - u_start;
+    float filamentLength = length(filamentDirection);
 
-    float lengthLine = length(direction);
+    if (filamentLength < 0.001) discard;
 
-    if (lengthLine < 0.001) discard;
-
-    direction /= lengthLine;
+    filamentDirection /= filamentLength;
 
     vec2 normal = vec2(
-        -direction.y,
-        direction.x
+        -filamentDirection.y,
+        filamentDirection.x
     );
 
-    vec2 relative = p - u_start;
+    vec2 relative = worldPosition - u_playerPosition;
 
-    float along = dot(relative, direction) / lengthLine;
-    float across = dot(relative, normal);
+    float axialPosition = dot(relative, filamentDirection) / filamentLength;
 
-    if (along < -0.05 || along > 1.05) discard;
+    float perpendicularDistance = dot(relative, normal);
 
-    float t = clamp(along, 0.0, 1.0);
+    if (axialPosition < 0.0 || axialPosition > 1.0) discard;
 
-
-    // ========================================================
-    // MAIN DISCHARGE
-    // ========================================================
-
-    float mainDistance = strand(
-        across,
-        t,
+    float distanceToMainStrand = strand(
+        perpendicularDistance,
+        axialPosition,
         0.0,
         0.0,
         30.0,
@@ -158,15 +128,11 @@ void main() {
         6.0
     );
 
-    float bundleDistance = 1000.0;
+    float distanceToStrandBundle = 1000.0;
 
     float filamentCore = 0.0;
     float filamentBody = 0.0;
 
-
-    // ========================================================
-    // SECONDARY FILAMENTS
-    // ========================================================
 
     for (int i = 0; i < 4; i++) {
 
@@ -188,9 +154,9 @@ void main() {
         float thickness =
             3.0 + 0.7 * mod(fi, 2.0);
 
-        float d = strand(
-            across,
-            t,
+        float distanceToBundleStrand = strand(
+            perpendicularDistance,
+            axialPosition,
             baseOffset,
             phase,
             amplitude,
@@ -198,86 +164,78 @@ void main() {
             thickness
         );
 
-        bundleDistance = min(bundleDistance, d);
+        distanceToStrandBundle = min(distanceToStrandBundle, distanceToBundleStrand);
 
         float core = 1.0 - smoothstep(
             -0.5,
             0.5,
-            d
+            distanceToBundleStrand
         );
 
         float body = 1.0 - smoothstep(
             0.0,
             thickness * 1.5,
-            d
+            distanceToBundleStrand
         );
 
         filamentCore = max(filamentCore, core);
         filamentBody = max(filamentBody, body);
     }
 
-
-    // ========================================================
-    // OUTER GLOW
-    // ========================================================
-
-    float glowDistance = min(
-        mainDistance,
-        bundleDistance
+    float distanceToClosestFilament = min(
+        distanceToMainStrand,
+        distanceToStrandBundle
     );
 
-    float glow = exp(
-        -max(glowDistance, 0.0) / 8.0
+    // Visual effects
+    float filamentGlow = exp(
+        -max(distanceToClosestFilament, 0.0) / 8.0
     );
 
-    float core = 1.0 - smoothstep(
+    float mainStrandCore = 1.0 - smoothstep(
         0.0,
         1.8,
-        mainDistance
+        distanceToMainStrand
     );
 
-    float filaments = 1.0 - smoothstep(
+    float strandBundleGradient = 1.0 - smoothstep(
         0.0,
         1.3,
-        bundleDistance
+        distanceToStrandBundle
     );
 
-    // ========================================================
-    // FINAL COLOR
-    // ========================================================
-
-    float intensity =
-        glow * 0.45
+    // Combined brightness
+    float filamentIntensity =
+        filamentGlow * 0.45
         +
-        filaments * 0.85
+        strandBundleGradient * 0.85
         +
-        core * 1.5;
+        mainStrandCore * 1.5;
 
-    float pulse = 0.85 + 0.15 * sin(
-        u_time * 12.0 + t * 35.0
-    );
+    float pulse =
+        0.65
+        + 0.20 * sin(u_time * 10.0 + axialPosition * 35.0)
+        + 0.10 * sin(u_time * 17.0 - axialPosition * 22.0)
+        + 0.05 * sin(u_time * 6.0 + axialPosition * 60.0);
 
-    intensity *= pulse;
+    filamentIntensity *= pulse;
 
-
-    // ========================================================
-    // FOREGROUND GRAYSCALE
-    // ========================================================
-    
+    // Grayscale color
     float gray =
         0.02
-        + glow * 0.08
-        + filaments * 0.08
+        + filamentGlow * 0.08
+        + strandBundleGradient * 0.08
         + filamentBody * 0.12
         + filamentCore * 0.10
-        + core * 0.10;
+        + mainStrandCore * 0.10;
 
     gray = clamp(gray, 0.0, 0.5);
 
     vec3 color = vec3(gray);
 
+    // Transparency
     float alpha = clamp(
-        intensity * u_color.a,
+        filamentIntensity * u_color.a,
         0.0,
         1.0
     );
