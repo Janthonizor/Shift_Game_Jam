@@ -9,27 +9,21 @@ uniform float u_boundaryRadius;
 uniform float u_horizontalOffset;
 uniform float u_verticalOffset;
 
-uniform bool u_menuHovered;
-uniform bool u_settingsHovered;
-uniform bool u_restartHovered;
-uniform bool u_pauseHovered;
-uniform bool u_menuPressed;
-uniform bool u_settingsPressed;
-uniform bool u_restartPressed;
-uniform bool u_pausePressed;
+uniform bool u_enabled[4];
+uniform bool u_hovered[4];
+uniform bool u_pressed[4];
+
+uniform int u_icons[4];
 
 uniform float u_iconRadius;
-uniform vec2 u_menuPosition;
-uniform vec2 u_settingsPosition;
-uniform vec2 u_restartPosition;
-uniform vec2 u_pausePosition;
-
-uniform bool u_isPaused;
-uniform bool u_inSettings;
-uniform bool u_inMainMenu;
+uniform vec2 u_iconPositions[4];
 
 out vec4 outColor;
 
+
+// --------------------------------------------------
+// Drawing helpers
+// --------------------------------------------------
 
 float softEdge(float distance, float threshold) {
 
@@ -114,7 +108,8 @@ float drawFilledTriangle(vec2 uv, vec2 a, vec2 b, vec2 c) {
 
     float inside = min(min(d0, d1), d2);
 
-    float signedDistance = distanceToEdge * (inside >= 0.0 ? -1.0 : 1.0);
+    float signedDistance =
+        distanceToEdge * (inside >= 0.0 ? -1.0 : 1.0);
 
     float softness = fwidth(signedDistance) * 3.5;
 
@@ -125,6 +120,10 @@ float drawFilledTriangle(vec2 uv, vec2 a, vec2 b, vec2 c) {
     );
 }
 
+
+// --------------------------------------------------
+// Icon drawing functions
+// --------------------------------------------------
 
 float drawMenuIcon(vec2 uv) {
 
@@ -158,13 +157,11 @@ float drawSettingsIcon(vec2 uv) {
 
     float radius = 0.32 + wave * centerFade;
 
-    float outerRing = drawCircle(
+    return drawCircle(
         uv,
         radius,
         0.09
     );
-
-    return outerRing;
 }
 
 
@@ -212,10 +209,6 @@ float drawPlayIcon(vec2 uv) {
 
 float drawPauseIcon(vec2 uv) {
 
-    if (u_isPaused) {
-        return drawPlayIcon(uv);
-    }
-
     float leftBar = drawBox(
         uv - vec2(-0.16, 0.0),
         vec2(0.055, 0.32)
@@ -229,6 +222,93 @@ float drawPauseIcon(vec2 uv) {
     return max(leftBar, rightBar);
 }
 
+
+float drawArrowIcon(vec2 uv, bool pointsRight) {
+
+    if (pointsRight) {
+
+        float shaft = drawLine(
+            uv,
+            vec2(-0.38, 0.0),
+            vec2(0.22, 0.0),
+            0.055
+        );
+
+        float head = drawFilledTriangle(
+            uv,
+            vec2(0.05, -0.28),
+            vec2(0.05, 0.28),
+            vec2(0.38, 0.0)
+        );
+
+        return max(shaft, head);
+
+    }
+    else {
+
+        float shaft = drawLine(
+            uv,
+            vec2(0.38, 0.0),
+            vec2(-0.22, 0.0),
+            0.055
+        );
+
+        float head = drawFilledTriangle(
+            uv,
+            vec2(-0.05, -0.28),
+            vec2(-0.05, 0.28),
+            vec2(-0.38, 0.0)
+        );
+
+        return max(shaft, head);
+
+    }
+
+}
+
+
+// --------------------------------------------------
+// Icon selection
+// --------------------------------------------------
+
+float drawIcon(vec2 uv, int iconType) {
+
+    if (iconType == 1) {
+        return drawMenuIcon(uv);
+    }
+
+    if (iconType == 2) {
+        return drawSettingsIcon(uv);
+    }
+
+    if (iconType == 3) {
+        return drawRestartIcon(uv);
+    }
+
+    if (iconType == 4) {
+        return drawPlayIcon(uv);
+    }
+
+    if (iconType == 5) {
+        return drawPauseIcon(uv);
+    }
+
+    if (iconType == 6) {
+        return drawArrowIcon(uv, false);
+    }
+
+    if (iconType == 7) {
+        return drawArrowIcon(uv, true);
+    }
+
+    return 0.0;
+
+}
+
+
+// --------------------------------------------------
+// Main
+// --------------------------------------------------
 
 void main() {
 
@@ -245,7 +325,11 @@ void main() {
 
     float distanceFromCenter = length(offset);
 
-    // Identify button region.
+
+    // --------------------------------------------------
+    // Identify button position
+    // --------------------------------------------------
+
     bool topLeft =
         dx <= -u_horizontalOffset &&
         dy <= -u_verticalOffset;
@@ -262,6 +346,35 @@ void main() {
         dx >= u_horizontalOffset &&
         dy >= u_verticalOffset;
 
+
+    int buttonIndex = -1;
+
+    if (topLeft) {
+        buttonIndex = 0;
+    }
+    else if (topRight) {
+        buttonIndex = 1;
+    }
+    else if (bottomLeft) {
+        buttonIndex = 2;
+    }
+    else if (bottomRight) {
+        buttonIndex = 3;
+    }
+    else {
+        discard;
+    }
+
+
+    // --------------------------------------------------
+    // Check button availability
+    // --------------------------------------------------
+
+    if (!u_enabled[buttonIndex]) {
+        discard;
+    }
+
+
     // Clip to canvas and outside gameplay circle.
     bool outsideCircle =
         distanceFromCenter >= u_boundaryRadius;
@@ -277,34 +390,17 @@ void main() {
     }
 
 
-    bool hovered;
-    bool pressed;
-    vec2 iconPosition;
+    bool hovered = u_hovered[buttonIndex];
+    bool pressed = u_pressed[buttonIndex];
 
-    if (topLeft) {
-        hovered = u_menuHovered;
-        pressed = u_menuPressed;
-        iconPosition = u_menuPosition;
-    }
-    else if (topRight) {
-        hovered = u_settingsHovered;
-        pressed = u_settingsPressed;
-        iconPosition = u_settingsPosition;
-    }
-    else if (bottomLeft) {
-        hovered = u_restartHovered;
-        pressed = u_restartPressed;
-        iconPosition = u_restartPosition;
-    }
-    else if (bottomRight) {
-        hovered = u_pauseHovered;
-        pressed = u_pausePressed;
-        iconPosition = u_pausePosition;
-    }
-    else {
-        discard;
-    }
+    int iconType = u_icons[buttonIndex];
 
+    vec2 iconPosition = u_iconPositions[buttonIndex];
+
+
+    // --------------------------------------------------
+    // Icon coordinates
+    // --------------------------------------------------
 
     float iconScale = clamp(
         1.0 + (40.0 / u_iconRadius) * 1.1,
@@ -312,9 +408,9 @@ void main() {
         2.0
     );
 
-
     vec2 iconUV =
-        (screenPosition - iconPosition) / (u_iconRadius * iconScale);
+        (screenPosition - iconPosition) /
+        (u_iconRadius * iconScale);
 
 
     float circleDistance = length(
@@ -398,23 +494,10 @@ void main() {
 
 
     // --------------------------------------------------
-    // Procedural button icons
+    // Procedural icon
     // --------------------------------------------------
 
-    float icon = 0.0;
-
-    if (topLeft) {
-        icon = drawMenuIcon(iconUV);
-    }
-    else if (topRight) {
-        icon = drawSettingsIcon(iconUV);
-    }
-    else if (bottomLeft) {
-        icon = drawRestartIcon(iconUV);
-    }
-    else if (bottomRight) {
-        icon = drawPauseIcon(iconUV);
-    }
+    float icon = drawIcon(iconUV, iconType);
 
     finalColor = mix(
         finalColor,
@@ -430,19 +513,20 @@ void main() {
     float pressedBorder = 0.0;
 
     if (pressed) {
+
         pressedBorder = 1.0 - smoothstep(
             0.0,
             8.0,
             pressedEdgeDistance
         );
+
         finalColor = mix(
             finalColor,
             vec3(0.0),
             pressedBorder
         );
-    }
 
-    
+    }
 
 
     // --------------------------------------------------
@@ -453,4 +537,5 @@ void main() {
     alpha = max(alpha, pressedBorder);
 
     outColor = vec4(finalColor, alpha);
+
 }

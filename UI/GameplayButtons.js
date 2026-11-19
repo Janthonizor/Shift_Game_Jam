@@ -7,35 +7,44 @@ export class GameplayButtons {
 
         this.buttons = {
 
-            menu: {
-                id: "menu",
+            topLeft: {
+                id: "topLeft",
+                icon: null,
+                action: null,
                 hovered: false,
                 pressed: false,
-                enabled: true
+                enabled: false
             },
 
-            settings: {
-                id: "settings",
+            topRight: {
+                id: "topRight",
+                icon: null,
+                action: null,
                 hovered: false,
                 pressed: false,
-                enabled: true
+                enabled: false
             },
 
-            restart: {
-                id: "restart",
+            bottomLeft: {
+                id: "bottomLeft",
+                icon: null,
+                action: null,
                 hovered: false,
                 pressed: false,
-                enabled: true
+                enabled: false
             },
 
-            pause: {
-                id: "pause",
+            bottomRight: {
+                id: "bottomRight",
+                icon: null,
+                action: null,
                 hovered: false,
                 pressed: false,
-                enabled: true
+                enabled: false
             }
 
         };
+
         this.onButtonClick = null;
 
         // Geometry configuration
@@ -59,7 +68,7 @@ export class GameplayButtons {
         this.canvas.addEventListener("mouseleave", () => {
             this.clearHover();
         });
-        
+
         this.canvas.addEventListener("click", (event) => {
 
             this.updateMousePosition(event);
@@ -68,13 +77,17 @@ export class GameplayButtons {
 
                 if (!button.enabled || !button.hovered) continue;
 
-                this.onButtonClick?.(button.id);
+                this.onButtonClick?.(
+                    button.id,
+                    button.action
+                );
 
                 break;
 
             }
 
         });
+
         this.canvas.addEventListener("mousedown", (event) => {
 
             this.updateMousePosition(event);
@@ -84,7 +97,7 @@ export class GameplayButtons {
             }
 
         });
-        
+
         window.addEventListener("mouseup", () => {
 
             for (const button of Object.values(this.buttons)) {
@@ -96,6 +109,35 @@ export class GameplayButtons {
     }
 
 
+    // --------------------------------------------------
+    // Button configuration
+    // --------------------------------------------------
+
+    setLayout(layout) {
+
+        for (const [id, button] of Object.entries(this.buttons)) {
+
+            const config = layout[id];
+
+            button.icon = config?.icon ?? null;
+            button.action = config?.action ?? null;
+            button.enabled = config !== undefined &&
+                 config.enabled !== false;
+
+            // Clear interaction state when changing layouts.
+            button.hovered = false;
+            button.pressed = false;
+
+        }
+
+        this.clearHover();
+
+    }
+
+
+    // --------------------------------------------------
+    // Mouse interaction
+    // --------------------------------------------------
 
     updateMousePosition(event) {
 
@@ -152,23 +194,14 @@ export class GameplayButtons {
 
     updateHover() {
 
-        const regions = {
-            menu: "topLeft",
-            settings: "topRight",
-            restart: "bottomLeft",
-            pause: "bottomRight"
-        };
-
-        for (const [id, corner] of Object.entries(regions)) {
-
-            const button = this.buttons[id];
+        for (const [id, button] of Object.entries(this.buttons)) {
 
             button.hovered =
                 button.enabled &&
                 this.isInsideRegion(
                     this.mouse.x,
                     this.mouse.y,
-                    corner
+                    id
                 );
 
         }
@@ -183,6 +216,11 @@ export class GameplayButtons {
         }
 
     }
+
+
+    // --------------------------------------------------
+    // Button geometry
+    // --------------------------------------------------
 
     calculateButtonCircle(width, height) {
 
@@ -201,7 +239,6 @@ export class GameplayButtons {
             height * 0.5 *
             this.verticalOffsetMultiplier;
 
-        // Maximum radius allowed by the cross boundaries.
         let low = 0;
 
         let high = Math.min(
@@ -209,14 +246,10 @@ export class GameplayButtons {
             (centerY - verticalOffset) * 0.5
         );
 
-        // Find the largest radius that also clears
-        // the outer gameplay circle.
         for (let i = 0; i < 40; i++) {
 
             const radius = (low + high) * 0.5;
 
-            // Center is positioned at (radius, radius),
-            // making the circle tangent to the canvas edges.
             const distanceFromCenter = Math.hypot(
                 centerX - radius,
                 centerY - radius
@@ -243,6 +276,7 @@ export class GameplayButtons {
 
     }
 
+
     updateLayout() {
 
         const width = this.canvas.width;
@@ -265,25 +299,25 @@ export class GameplayButtons {
 
         this.circles = {
 
-            menu: {
+            topLeft: {
                 x: circle.x,
                 y: circle.y,
                 radius: circle.radius * 0.7
             },
 
-            settings: {
+            topRight: {
                 x: width - circle.x,
                 y: circle.y,
                 radius: circle.radius * 0.7
             },
 
-            restart: {
+            bottomLeft: {
                 x: circle.x,
                 y: height - circle.y,
                 radius: circle.radius * 0.7
             },
 
-            pause: {
+            bottomRight: {
                 x: width - circle.x,
                 y: height - circle.y,
                 radius: circle.radius * 0.7
@@ -292,4 +326,5 @@ export class GameplayButtons {
         };
 
     }
+
 }

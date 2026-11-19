@@ -1,3 +1,4 @@
+from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 WIDTH = 1000
@@ -10,7 +11,7 @@ GRID_SPACING = 50
 LINE_WIDTH = 7
 BLUR_RADIUS = 3
 
-OUTPUT_FILE = "grid_background.png"
+OUTPUT_FILE = Path(__file__).parent / "grid_background.png"
 
 # Create background
 image = Image.new("RGB", (WIDTH, HEIGHT), BACKGROUND_COLOR)

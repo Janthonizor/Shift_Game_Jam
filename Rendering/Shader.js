@@ -117,9 +117,19 @@ export function uploadUniforms(gl, program, values) {
 
         if (!uniform || uniform.location === null) continue;
 
-        gl[`uniform${uniform.type}`](
+        const uploadFunction = gl[`uniform${uniform.type}`];
+
+        if (typeof uploadFunction !== "function") {
+            throw new Error(
+                `Invalid uniform type "${uniform.type}" for "${name}".`
+            );
+        }
+
+        uploadFunction.call(
+            gl,
             uniform.location,
             value
         );
+
     }
 }

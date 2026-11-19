@@ -1,9 +1,12 @@
-
 import { Camera } from "../Rendering/Camera.js";
 import { Physics } from "./Physics.js";
 import { OrbSpatialGrid } from "./OrbSpatialGrid.js";
 import { GameState, GameStateManager } from "./GameState.js";
 import { GameplayButtons } from "../UI/GameplayButtons.js";
+import { ButtonLayouts } from "../UI/ButtonLayouts.js";
+import { LevelManager } from "../Levels/LevelManager.js";
+import { Levels } from "../Levels/levels.js";
+import { createLevelData } from "../Levels/LevelData.js";
 
 
 export class Game {
@@ -13,31 +16,24 @@ export class Game {
         this.renderer = renderer;
         this.stateManager = new GameStateManager();
 
+        this.settingsOpen = false;
+
         this.gameplayButtons = new GameplayButtons(renderer.canvas);
-        this.gameplayButtons.onButtonClick = (id) => {
-            this.handleGameplayButtonClick(id);
+
+        this.gameplayButtons.onButtonClick = (id, action) => {
+            this.handleGameplayButtonClick(id, action);
         };
+
+        this.updateButtonLayout();
 
         this.orb_texture = null;
         this.checkpoint_texture = null;
 
-        this.performance = {
-            frameTime: 0,
-            frameInterval: 0,
-            averageFrameTime: 0,
-            minFrameTime: Infinity,
-            maxFrameTime: 0,
-            fps: 0,
-            totalFrameTime: 0,
-            frameCount: 0,
-        };
 
-        this.targetFrameTime = 1000 / 60;
-        this.lastFrameTime = null;
 
         this.player = {
-            x: 32,
-            y: 32,
+            x: null,
+            y: null,
 
             width: 128,
             height: 128,
@@ -48,17 +44,17 @@ export class Game {
             bounciness: 0.9,
             maxSpeed: 1300,
 
-            vx: 100,
-            vy: 100,
+            vx: null,
+            vy: null,
 
-            speed: 0,
-            direction: 0,
+            speed: null,
+            direction: null,
 
-            ax: 0,
-            ay: 0,
+            ax: null,
+            ay: null,
 
-            prevVx: 0,
-            prevVy: 0,
+            prevVx: null,
+            prevVy: null,
 
             orbRange: 650,
             engaged: false,
@@ -68,65 +64,25 @@ export class Game {
             showBorder: true,
         };
 
-        this.player.speed = Math.hypot(
-            this.player.vx,
-            this.player.vy
-        );
 
         this.camera = new Camera(
             renderer.canvas.width,
             renderer.canvas.height
         );
 
-        this.camera.set_position(
-            this.player.x,
-            this.player.y
-        );
 
         this.physics = new Physics();
 
-        this.level = {
+        this.levelManager = new LevelManager(Levels);
 
-            background: {
-                x: 5000,
-                y: 5000,
-                width: 10000,
-                height: 10000,
-                texture: null
-            },
+        // Default main-menu selection.
+        this.selectedLevelId = Levels[0]?.id ?? null;
 
-            // Testing level of randomly shifted 12 x 12 grid.
-            orbs: Array.from({ length: 12 * 12 }, (_, i) => {
-
-                const columns = 12;
-                const spacing = 800;
-                const offset = 400;
-
-                const col = i % columns;
-                const row = Math.floor(i / columns);
-
-                return {
-                    x: offset + col * spacing + (Math.random() * 200 - 100),
-                    y: offset + row * spacing + (Math.random() * 200 - 100),
-
-                    width: 200,
-                    height: 200,
-
-                    texture: null,
-                    inRange: false,
-                    alignment: 0,
-                    spinAngle: 0
-                };
-
-            }),
-
-            checkpoints: [],
-        };
-
-        this.orbGrid = new OrbSpatialGrid(256);
-        this.orbGrid.build(this.level.orbs);
-
+        // No level is loaded until one is selected.
+        this.level = null;
+        this.orbGrid = null;
         this.nearbyOrbs = [];
+
 
         this.input = {
             w: false,
@@ -149,15 +105,54 @@ export class Game {
     }
 
 
-    handleGameplayButtonClick(id) {
+    handleGameplayButtonClick(id, action) {
 
-        if (id !== "pause") return;
+        switch (action) {
 
-        if (this.stateManager.is(GameState.PLAYING)) {
-            this.changeState(GameState.PAUSED);
-        }
-        else if (this.stateManager.is(GameState.PAUSED)) {
-            this.changeState(GameState.PLAYING);
+            case "toggleSettings":
+                this.toggleSettings();
+                break;
+
+            case "openMenu":
+                this.settingsOpen = false;
+                this.changeState(GameState.MAIN_MENU);
+                break;
+
+            case "pause":
+                this.changeState(GameState.PAUSED);
+                break;
+
+            case "resume":
+                this.changeState(GameState.PLAYING);
+                break;
+
+            case "startLevel":
+                this.startLevel(this.selectedLevelId);
+                break;
+
+            case "restartLevel":
+                this.startLevel(this.levelManager.currentLevelId);
+                break;
+
+            case "nextLevel": {
+
+                const nextLevelId = this.levelManager.getNextLevelId();
+
+                if (nextLevelId !== null) {
+                    this.startLevel(nextLevelId);
+                }
+
+                break;
+            }
+
+            case "previousMenu":
+                // Implement menu navigation later.
+                break;
+
+            case "nextMenu":
+                // Implement menu navigation later.
+                break;
+
         }
 
     }
@@ -255,22 +250,90 @@ export class Game {
 
         this.stateManager.change(nextState);
 
+        this.updateButtonLayout();
+
         if (this.stateManager.isPlaying) {
             this.input.shift = this.keys.shiftPressed;
         }
 
     }
 
+    startLevel(levelId) {
+        
+        if (!this.levelManager.isUnlocked(levelId)) {
+            return;
+        }
+
+        const definition = this.levelManager.getLevel(levelId);
+
+        if (!definition) {
+            console.error(`Could not find level with ID: ${levelId}`);
+            return;
+        }
+
+        this.levelManager.setCurrentLevel(levelId);
+
+        // Create a fresh runtime copy of the level.
+        this.level = createLevelData(definition);
+
+        this.level.background.texture = this.backgroundTexture;
+
+        // Rebuild the orb spatial grid for this level.
+        this.orbGrid = new OrbSpatialGrid(256);
+        this.orbGrid.build(this.level.orbs);
+
+        const start = this.level.start;
+
+        // Reset player position and velocity.
+        this.player.x = start.position.x;
+        this.player.y = start.position.y;
+
+        this.player.vx = start.speed.x;
+        this.player.vy = start.speed.y;
+
+        this.player.speed = Math.hypot(
+            this.player.vx,
+            this.player.vy
+        );
+
+        this.player.ax = 0;
+        this.player.ay = 0;
+
+        this.player.prevVx = this.player.vx;
+        this.player.prevVy = this.player.vy;
+
+        this.player.engaged = false;
+        this.player.engagedOrb = null;
+        this.player.rippleDistance = 0;
+
+        this.physics.engagedOrb = null;
+
+        // Reset nearby orb tracking.
+        this.nearbyOrbs = [];
+        this.updateValidOrbs();
+
+        // Reset camera.
+        this.camera.set_position(
+            this.player.x,
+            this.player.y
+        );
+
+        this.clearGameplayInput();
+        this.settingsOpen = false;
+
+        this.changeState(GameState.PLAYING);
+
+    }
+
 
     async start() {
 
-        this.level.background.texture =
+        this.backgroundTexture =
             await this.renderer.load_render_texture(
                 "./Assets/grid_background.png"
             );
 
-        // Temporary: start directly in gameplay until the main menu exists.
-        this.changeState(GameState.PLAYING);
+        this.changeState(GameState.MAIN_MENU);
 
         this.running = true;
         this.lastFrameTime = null;
@@ -280,34 +343,7 @@ export class Game {
     }
 
 
-    recordFrameTime(executionTime, frameInterval) {
 
-        const p = this.performance;
-
-        p.frameTime = executionTime;
-        p.frameInterval = frameInterval;
-
-        p.totalFrameTime += executionTime;
-        p.frameCount++;
-
-        p.averageFrameTime =
-            p.totalFrameTime / p.frameCount;
-
-        p.minFrameTime = Math.min(
-            p.minFrameTime,
-            executionTime
-        );
-
-        p.maxFrameTime = Math.max(
-            p.maxFrameTime,
-            executionTime
-        );
-
-        p.fps = frameInterval > 0
-            ? 1000 / frameInterval
-            : 0;
-
-    }
 
 
     loop = (timestamp) => {
@@ -319,8 +355,6 @@ export class Game {
             requestAnimationFrame(this.loop);
             return;
         }
-
-        const frameStart = performance.now();
 
         const elapsed = timestamp - this.lastFrameTime;
         this.lastFrameTime = timestamp;
@@ -336,15 +370,12 @@ export class Game {
 
         this.renderer.render(this);
 
-        const executionTime = performance.now() - frameStart;
 
-        this.recordFrameTime(executionTime, elapsed);
+
 
         requestAnimationFrame(this.loop);
 
     };
-
-
 
 
     updateValidOrbs() {
@@ -433,6 +464,53 @@ export class Game {
         }
 
         
+
+    }
+
+
+    updateButtonLayout() {
+
+        const layout = {
+            ...(ButtonLayouts[this.stateManager.current] ?? {})
+        };
+
+        if (this.settingsOpen) {
+
+            layout.topLeft = {
+                icon: "menu",
+                action: "toggleSettings"
+            };
+
+            layout.bottomLeft = {
+                icon: "previous",
+                action: "previousMenu"
+            };
+
+            layout.bottomRight = {
+                icon: "next",
+                action: "nextMenu"
+            };
+
+        }
+
+        this.gameplayButtons.setLayout(layout);
+
+    }
+
+    toggleSettings() {
+
+        this.settingsOpen = !this.settingsOpen;
+
+        // Opening settings pauses active gameplay.
+        if (
+            this.settingsOpen &&
+            this.stateManager.isPlaying
+        ) {
+            this.changeState(GameState.PAUSED);
+            return;
+        }
+
+        this.updateButtonLayout();
 
     }
 

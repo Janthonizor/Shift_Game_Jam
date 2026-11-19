@@ -7,7 +7,7 @@ export class Physics {
 
         this.springCaptureMultiplier = 0.2;
         this.springStiffness = 8000;
-        this.orbTorque = 40000000;
+        this.orbTorque = 20000000;
         this.springDamping = 700;
     }
 

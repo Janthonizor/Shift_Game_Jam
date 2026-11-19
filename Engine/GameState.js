@@ -1,15 +1,11 @@
-
 export const GameState = Object.freeze({
 
     MAIN_MENU: "MAIN_MENU",
-    SETTINGS: "SETTINGS",
-
     LOADING: "LOADING",
 
     PLAYING: "PLAYING",
     PAUSED: "PAUSED",
 
-    LEVEL_FAILED: "LEVEL_FAILED",
     LEVEL_COMPLETED: "LEVEL_COMPLETED"
 
 });
@@ -18,29 +14,16 @@ export const GameState = Object.freeze({
 export class GameStateManager {
 
     constructor() {
-
         this.current = GameState.MAIN_MENU;
-        this.previous = null;
-
     }
-
 
     change(nextState) {
-
-        if (this.current === nextState) {
-            return;
-        }
-
-        this.previous = this.current;
+        if (this.current === nextState) return;
         this.current = nextState;
-
     }
 
-
     is(state) {
-
         return this.current === state;
-
     }
 
     get isPlaying() {
@@ -51,23 +34,9 @@ export class GameStateManager {
         return [
             GameState.PLAYING,
             GameState.PAUSED,
-            GameState.LEVEL_FAILED,
-            GameState.LEVEL_COMPLETED
+            GameState.LEVEL_COMPLETED,
+            GameState.LOADING
         ].includes(this.current);
-    }
-
-
-    returnToPrevious() {
-
-        if (this.previous === null) {
-            return;
-        }
-
-        const previous = this.previous;
-
-        this.current = previous;
-        this.previous = null;
-
     }
 
 }

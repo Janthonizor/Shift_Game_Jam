@@ -274,27 +274,16 @@ export class Renderer {
                 u_horizontalOffset: { type: "1f" },
                 u_verticalOffset:   { type: "1f" },
 
-                u_menuHovered:      { type: "1i" },
-                u_settingsHovered:  { type: "1i" },
-                u_restartHovered:   { type: "1i" },
-                u_pauseHovered:     { type: "1i" },
-
-                u_menuPressed:      { type: "1i" },
-                u_settingsPressed:  { type: "1i" },
-                u_restartPressed:   { type: "1i" },
-                u_pausePressed:     { type: "1i" },
-
                 u_iconRadius:       { type: "1f" },
 
-                u_menuPosition:     { type: "2fv" },
-                u_settingsPosition: { type: "2fv" },
-                u_restartPosition:  { type: "2fv" },
-                u_pausePosition:    { type: "2fv" },
+                "u_enabled[0]":     { type: "1iv" },
+                "u_hovered[0]":     { type: "1iv" },
+                "u_pressed[0]":     { type: "1iv" },
+                "u_icons[0]":       { type: "1iv" },
 
-                u_isPaused:         { type: "1i" },
-                u_inSettings:       { type: "1i" },
-                u_inMainMenu:       { type: "1i" }
+                "u_iconPositions[0]": { type: "2fv" }
             }
+
         };
 
         uploadShaderSettings(
@@ -805,9 +794,7 @@ export class Renderer {
 
     }
 
-    renderGameplayButtons(buttons, gameState) {
-
-        this.gameplayButtons = buttons;
+    renderGameplayButtons(buttons) {
 
         const shader = this.gameplayButtonsProgram;
 
@@ -818,6 +805,46 @@ export class Renderer {
             this.framebuffer.height
         );
 
+        const buttonOrder = [
+            "topLeft",
+            "topRight",
+            "bottomLeft",
+            "bottomRight"
+        ];
+
+        const iconIDs = {
+            menu: 1,
+            settings: 2,
+            restart: 3,
+            play: 4,
+            pause: 5,
+            previous: 6,
+            next: 7
+        };
+
+        const enabled = [];
+        const hovered = [];
+        const pressed = [];
+        const icons = [];
+        const positions = [];
+
+        for (const id of buttonOrder) {
+
+            const button = buttons.buttons[id];
+            const circle = buttons.circles[id];
+
+            enabled.push(button.enabled ? 1 : 0);
+            hovered.push(button.hovered ? 1 : 0);
+            pressed.push(button.pressed ? 1 : 0);
+
+            icons.push(iconIDs[button.icon] ?? 0);
+
+            positions.push(
+                circle.x,
+                circle.y
+            );
+
+        }
 
         uploadUniforms(this.gl, shader, {
 
@@ -832,54 +859,17 @@ export class Renderer {
             ],
 
             u_boundaryRadius: buttons.boundaryRadius,
-
             u_horizontalOffset: buttons.horizontalOffset,
-
             u_verticalOffset: buttons.verticalOffset,
 
-            u_menuHovered: buttons.buttons.menu.hovered ? 1 : 0,
+            u_iconRadius: buttons.circles.topLeft.radius,
 
-            u_menuPressed: buttons.buttons.menu.pressed ? 1 : 0,
+            "u_enabled[0]": new Int32Array(enabled),
+            "u_hovered[0]": new Int32Array(hovered),
+            "u_pressed[0]": new Int32Array(pressed),
+            "u_icons[0]": new Int32Array(icons),
 
-            u_settingsHovered: buttons.buttons.settings.hovered ? 1 : 0,
-
-            u_settingsPressed: buttons.buttons.settings.pressed ? 1 : 0,
-
-            u_restartHovered: buttons.buttons.restart.hovered ? 1 : 0,
-
-            u_restartPressed: buttons.buttons.restart.pressed ? 1 : 0,
-
-            u_pauseHovered: buttons.buttons.pause.hovered ? 1 : 0,
-
-            u_pausePressed: buttons.buttons.pause.pressed ? 1 : 0,
-
-            u_iconRadius: buttons.circles.menu.radius,
-
-            u_menuPosition: [
-                buttons.circles.menu.x,
-                buttons.circles.menu.y
-            ],
-
-            u_settingsPosition: [
-                buttons.circles.settings.x,
-                buttons.circles.settings.y
-            ],
-
-            u_restartPosition: [
-                buttons.circles.restart.x,
-                buttons.circles.restart.y
-            ],
-
-            u_pausePosition: [
-                buttons.circles.pause.x,
-                buttons.circles.pause.y
-            ],
-
-            u_isPaused: gameState === "PAUSED" ? 1 : 0,
-
-            u_inSettings: gameState === "SETTINGS" ? 1 : 0,
-
-            u_inMainMenu: gameState === "MAIN_MENU" ? 1 : 0,
+            "u_iconPositions[0]": new Float32Array(positions)
 
         });
 
@@ -896,29 +886,19 @@ export class Renderer {
         );
 
         this.renderGameplayButtons(
-            game.gameplayButtons,
-            game.stateManager.current
+            game.gameplayButtons
         );
 
     }
-
 
     renderMainMenu(game) {
+
         this.renderGameplayButtons(
-            game.gameplayButtons,
-            game.stateManager.current
+            game.gameplayButtons
         );
 
     }
 
-
-    renderSettings(game) {
-        this.renderGameplayButtons(
-            game.gameplayButtons,
-            game.stateManager.current
-        );
-
-    }
 
 
     renderLoading(game) {
@@ -969,10 +949,6 @@ export class Renderer {
 
             case "MAIN_MENU":
                 this.renderMainMenu(game);
-                break;
-
-            case "SETTINGS":
-                this.renderSettings(game);
                 break;
 
             case "LOADING":
