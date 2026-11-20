@@ -6,6 +6,7 @@ uniform vec2 u_resolution;
 
 uniform int u_levelCount;
 uniform int u_levelUnlocked[32];
+uniform int u_levelCompleted[32];
 
 uniform vec2 u_cameraPosition;
 uniform float u_zoom;
@@ -86,16 +87,16 @@ float sdLock(vec2 p) {
     // Vertical connecting lines
     float leftSide = sdSegment(
         p,
-        vec2(-0.275, -0.3),
-        vec2(-0.275, 0.4),
-        0.07
+        vec2(-0.28, -0.4),
+        vec2(-0.28, 0.4),
+        0.08
     );
 
     float rightSide = sdSegment(
         p,
-        vec2(0.275, -0.3),
-        vec2(0.275, 0.4),
-        0.07
+        vec2(0.28, -0.4),
+        vec2(0.28, 0.4),
+        0.08
     );
 
     // Lock body
@@ -123,6 +124,37 @@ float drawCircle(vec2 position, vec2 center, float radius) {
         radius,
         distanceFromCenter
     );
+}
+
+//star
+
+float sdStar5(vec2 p, float radius, float innerRadius) {
+
+    const float PI = 3.14159265359;
+    const float TAU = 6.28318530718;
+
+    float angle = atan(-p.y, p.x);
+    float r = length(p);
+
+    float sector = TAU / 5.0;
+
+    angle = mod(angle + PI / 2.0 + sector / 2.0, sector)
+          - sector / 2.0;
+
+    float outer = radius;
+    float inner = innerRadius;
+
+    float boundaryAngle = atan(
+        outer * sin(sector / 2.0),
+        outer * cos(sector / 2.0) - inner
+    );
+
+    float edgeAngle = abs(angle);
+
+    float edgeRadius = outer * inner /
+        (inner * cos(edgeAngle) + outer * sin(sector / 2.0 - edgeAngle));
+
+    return r - edgeRadius;
 }
 
 
@@ -168,6 +200,7 @@ void main() {
 
     float levelMask = 0.0;
     float lockMask = 0.0;
+    float starMask = 0.0;
 
 
     // Level circles
@@ -219,7 +252,7 @@ void main() {
 
         // Circle size
 
-        float circleRadius = 150.0 * radialScale;
+        float circleRadius = 300.0 * radialScale;
 
 
         // Fade near projection boundary
@@ -279,6 +312,36 @@ void main() {
                 lock * visibility
             );
         }
+
+        // ========================================================
+        // COMPLETION STAR
+        // ========================================================
+
+        if (u_levelCompleted[i] == 1) {
+
+            vec2 iconPosition =
+                (screenPosition - projectedPosition) /
+                max(circleRadius * 0.75, 0.001);
+
+            float starDistance = sdStar5(
+                iconPosition,
+                0.35,
+                0.20
+            );
+
+            float edgeWidth = max(fwidth(starDistance), 0.002);
+
+            float star = 1.0 - smoothstep(
+                0.0,
+                edgeWidth,
+                starDistance
+            );
+
+            starMask = max(
+                starMask,
+                star * visibility
+            );
+        }
     }
 
 
@@ -296,12 +359,20 @@ void main() {
 
     // Lock color
 
-    vec3 lockColor = vec3(0.61);
+    vec3 lockColor = vec3(0.16);
+    vec3 starColor = vec3(0.16);
+
 
     finalColor = mix(
         finalColor,
         lockColor,
         lockMask
+    );
+
+    finalColor = mix(
+        finalColor,
+        starColor,
+        starMask
     );
 
     fragColor = vec4(finalColor, 1.0);

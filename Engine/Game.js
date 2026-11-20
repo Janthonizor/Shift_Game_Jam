@@ -11,15 +11,21 @@ import { Levels } from "../Levels/levels.js";
 export class Game {
 
     constructor(renderer) {
+
         this.fps = 0;
+
         this.frameCount = 0;
+
         this.fpsTimer = 0;
+
         this.renderer = renderer;
+
         this.stateManager = new GameStateManager();
 
         this.settingsOpen = false;
 
         this.gameplayButtons = new GameplayButtons(renderer.canvas);
+
         this.checkpointRotation = 0
 
         this.gameplayButtons.onButtonClick = (id, action) => {
@@ -30,9 +36,8 @@ export class Game {
         this.updateButtonConfig();
 
         this.orb_texture = null;
+
         this.checkpoint_texture = null;
-
-
 
         this.player = {
             x: null,
@@ -66,16 +71,15 @@ export class Game {
             showBorder: true,
         };
 
-
         this.camera = new Camera(
             renderer.canvas.width,
             renderer.canvas.height
         );
 
-        this.menuLevelSpacing = 300
-
+        this.menuLevelSpacing = 700
 
         this.physics = null;
+
         this.levelManager = new LevelManager(Levels);
 
         // Default main-menu selection.
@@ -83,9 +87,10 @@ export class Game {
 
         // No level is loaded until one is selected.
         this.level = null;
-        this.orbGrid = null;
-        this.nearbyOrbs = [];
 
+        this.orbGrid = null;
+
+        this.nearbyOrbs = [];
 
         this.input = {
             w: false,
@@ -105,6 +110,7 @@ export class Game {
         this.setupInput();
 
         this.running = false;
+
     }
 
     updateFPS(dt) {

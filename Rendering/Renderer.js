@@ -336,7 +336,8 @@ export class Renderer {
             uniforms: {
                 u_resolution:       { type: "2fv" },
                 u_levelCount:       { type: "1i" },
-                u_levelUnlocked: { type: "1iv" },
+                u_levelUnlocked:    { type: "1iv" },
+                u_levelCompleted: { type: "1iv" },
 
                 u_cameraPosition:   { type: "2fv" },
                 u_zoom:             { type: "1f" },
@@ -1004,15 +1005,21 @@ export class Renderer {
                 game.levelManager.isUnlocked(level.id)?1:0
             )
         )
+        const levelCompleted = new Int32Array(
+            levels.map(level => 
+                game.levelManager.isCompleted(level.id)?1:0   
+            )
+        )
 
         uploadUniforms(gl, shader, {
             u_resolution: [
-                gl.drawingBufferWidth,
+                gl.drawingBufferWidth,   
                 gl.drawingBufferHeight
             ],
 
-            u_levelCount: levels.length,
+            u_levelCount: levels.length,                        
             u_levelUnlocked: levelUnlocked,
+            u_levelCompleted: levelCompleted,
 
             u_cameraPosition: [
                 game.camera.x,
