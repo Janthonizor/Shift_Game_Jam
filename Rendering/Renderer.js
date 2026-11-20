@@ -30,8 +30,10 @@ const [
     backgroundShaderSource,
     playerShaderSource,
     orbShaderSource,
+    checkpointShaderSource,
     filamentShaderSource,
-    gameplayButtonsShaderSource
+    gameplayButtonsShaderSource,
+    mainMenuShaderSource,
 ] = await Promise.all([
     loadShader(new URL("./Shaders/vertex.vert", import.meta.url)),
     loadShader(new URL("./Shaders/dithering.vert", import.meta.url)),
@@ -39,10 +41,11 @@ const [
     loadShader(new URL("./Shaders/background.frag", import.meta.url)),
     loadShader(new URL("./Shaders/player.frag", import.meta.url)),
     loadShader(new URL("./Shaders/orb.frag", import.meta.url)),
+    loadShader(new URL("./Shaders/checkpoint.frag", import.meta.url)),
     loadShader(new URL("./Shaders/filament.frag", import.meta.url)),
-    loadShader(new URL("./Shaders/gameplayButtons.frag", import.meta.url))
+    loadShader(new URL("./Shaders/gameplayButtons.frag", import.meta.url)),
+    loadShader(new URL("./Shaders/mainMenu.frag", import.meta.url))
 ]);
-
 
 export class Renderer {
 
@@ -85,6 +88,12 @@ export class Renderer {
             orbShaderSource
         );
 
+        this.checkpointProgram = createProgram(
+            gl,
+            vertexShaderSource,
+            checkpointShaderSource
+        );
+
         this.filamentProgram = createProgram(
             gl,
             vertexShaderSource,
@@ -97,10 +106,13 @@ export class Renderer {
             gameplayButtonsShaderSource
         );
 
-        this.ditheringEnabled = true;
+        this.mainMenuProgram = createProgram(
+            gl,
+            vertexShaderSource,
+            mainMenuShaderSource
+        );
 
-        this.vertexBuffer = gl.createBuffer();
-
+        
         this.playerSettings = {
 
             attributes: [
@@ -154,6 +166,36 @@ export class Renderer {
                 u_viewRadius:      { type: "1f" },
                 u_compression:     { type: "1f" },
                 u_orbRadius:       { type: "1f" },
+                u_engagedOnce:     { type: "1i" },
+            }
+        };
+
+        this.checkpointSettings = {
+
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
+
+            uniforms: {
+                u_resolution:          { type: "2fv" },
+                u_size:                { type: "2fv" },
+                u_color:               { type: "4fv" },
+
+                u_screenPosition:      { type: "2fv" },
+                u_cameraPosition:      { type: "2fv" },
+                u_checkpointPosition:  { type: "2fv" },
+
+                u_viewRadius:          { type: "1f"  },
+                u_compression:         { type: "1f"  },
+                u_zoom:                { type: "1f"  },
+                u_checkpointRadius:    { type: "1f"  },
+
+                u_playerDistance:      { type: "1f"  },
+                u_time:                { type: "1f"  },
+                u_rotation:            { type: "1f"  },
+                u_screenCenter:        { type: "2fv" },
+                u_checkpointUnlocked:  { type: "1i"  },
             }
         };
 
@@ -285,6 +327,26 @@ export class Renderer {
 
         };
 
+        this.mainMenuSettings = {
+            attributes: [
+                "a_position",
+                "a_texCoord"
+            ],
+
+            uniforms: {
+                u_resolution:       { type: "2fv" },
+                u_levelCount:       { type: "1i" },
+                u_levelUnlocked: { type: "1iv" },
+
+                u_cameraPosition:   { type: "2fv" },
+                u_zoom:             { type: "1f" },
+                u_compression:      { type: "1f" },
+                u_viewRadius:       { type: "1f" },
+
+                u_levelSpacing:     { type: "1f" }
+            }
+        };
+
         uploadShaderSettings(
             gl,
             this.playerSettings,
@@ -295,6 +357,12 @@ export class Renderer {
             gl,
             this.orbSettings,
             this.orbProgram
+        );
+
+        uploadShaderSettings(
+            gl,
+            this.checkpointSettings,
+            this.checkpointProgram
         );
 
         uploadShaderSettings(
@@ -321,9 +389,21 @@ export class Renderer {
             this.gameplayButtonsProgram
         );
 
+        uploadShaderSettings(
+            gl,
+            this.mainMenuSettings,
+            this.mainMenuProgram
+        );
+
+        this.ditheringEnabled = true;
+
+        this.vertexBuffer = gl.createBuffer();
+
         this.framebuffer = createFramebuffer(gl, canvas);
 
         this.sceneTexture = this.framebuffer.texture;
+        
+        this.checkpointRotation = 0;
     }
 
 
@@ -545,7 +625,7 @@ export class Renderer {
 
         const shader = this.orbProgram;
 
-        const segments = 6;
+        const segments = 12;
 
         let left = 1000.0;
         let right = -1000.0;
@@ -587,6 +667,7 @@ export class Renderer {
 
 
         const width = right - left;
+
         const height = bottom - top;
 
         const center = {
@@ -612,7 +693,7 @@ export class Renderer {
 
             u_size: [width, height],
 
-            u_color: [0.8, 0.85, 0.9, 1.0],
+            u_color: [0.3, 0.3, 0.3, 1.0],
 
             u_screenPosition: [
                 center.x,
@@ -644,9 +725,92 @@ export class Renderer {
             u_orbPosition: [
                 orb.x,
                 orb.y
-            ]
+            ],
+
+            u_engagedOnce: orb.engagedOnce ? 1 : 0
+
         });
 
+
+        this.renderQuad(shader, vertices);
+    }
+
+
+    renderCheckpoint(position, radius, player, camera, checkpointRotation, checkpointUnlocked) {
+
+        const gl = this.gl;
+        const shader = this.checkpointProgram;
+
+
+        
+
+        const screenPosition = camera.worldToScreen(
+            position[0],
+            position[1]
+        );
+
+        const screenRadius = radius * camera.zoom + 30;
+
+        const left = screenPosition.x - screenRadius;
+        const right = screenPosition.x + screenRadius;
+        const top = screenPosition.y - screenRadius;
+        const bottom = screenPosition.y + screenRadius;
+
+        const width = right - left;
+        const height = bottom - top;
+
+        const playerDistance = Math.hypot(
+            player.x - position[0],
+            player.y - position[1]
+        );
+
+        const vertices = createQuadVertices(
+            left,
+            top,
+            right,
+            bottom
+        );
+
+
+
+        uploadUniforms(gl, shader, {
+
+            u_resolution: [
+                gl.drawingBufferWidth,
+                gl.drawingBufferHeight
+            ],
+
+            u_size: [width, height],
+            u_color: [1.0, 1.0, 1.0, 1.0],
+
+            u_screenPosition: [
+                screenPosition.x,
+                screenPosition.y
+            ],
+
+            u_cameraPosition: [
+                camera.x,
+                camera.y
+            ],
+
+            u_checkpointPosition: position,
+
+            u_viewRadius: camera.viewRadius,
+            u_compression: camera.compression,
+            u_zoom: camera.zoom,
+
+            u_checkpointRadius: radius,
+            u_playerDistance: playerDistance,
+
+            u_time: performance.now() * 0.001,
+            u_rotation: checkpointRotation,
+
+            u_screenCenter: [
+                gl.drawingBufferWidth * 0.5,
+                gl.drawingBufferHeight * 0.5
+            ],
+            u_checkpointUnlocked: checkpointUnlocked ? 1 : 0,
+        });
 
         this.renderQuad(shader, vertices);
     }
@@ -709,13 +873,24 @@ export class Renderer {
     }
 
 
-    renderGameplay(level, player, camera) {
+    renderGameplay(level, player, camera, checkpointRotation, checkpointUnlocked) {
 
         this.renderBackground(level.background, camera);
+
+        
 
         for (const orb of level.orbs) {
             this.renderOrb(orb, camera);
         }
+
+        this.renderCheckpoint(
+            level.checkpoint_position,
+            level.checkpoint_radius,
+            player,
+            camera,
+            checkpointRotation,
+            checkpointUnlocked
+        );
 
         this.renderPlayer(player, camera);
 
@@ -726,7 +901,7 @@ export class Renderer {
                 camera
             );
         }
-
+        
     }
 
 
@@ -805,24 +980,67 @@ export class Renderer {
         this.renderGameplay(
             game.level,
             game.player,
-            game.camera
+            game.camera,
+            game.checkpointRotation,
+            game.level.orbs.every(orb => orb.engagedOnce)
         );
 
         this.renderGameplayButtons(
             game.gameplayButtons
         );
+        
 
     }
 
 
     renderMainMenu(game) {
 
+        const gl = this.gl;
+        const shader = this.mainMenuProgram
+
+        const levels = game.levelManager.levels;
+        const levelUnlocked = new Int32Array(
+            levels.map(level =>
+                game.levelManager.isUnlocked(level.id)?1:0
+            )
+        )
+
+        uploadUniforms(gl, shader, {
+            u_resolution: [
+                gl.drawingBufferWidth,
+                gl.drawingBufferHeight
+            ],
+
+            u_levelCount: levels.length,
+            u_levelUnlocked: levelUnlocked,
+
+            u_cameraPosition: [
+                game.camera.x,
+                game.camera.y
+            ],
+
+            u_zoom: game.camera.zoom,
+            u_compression: game.camera.compression,
+            u_viewRadius: game.camera.viewRadius,
+
+            u_levelSpacing: game.menuLevelSpacing
+        });
+
+        const vertices = createQuadVertices(
+            0,
+            0,
+            gl.drawingBufferWidth,
+            gl.drawingBufferHeight
+        );
+
+        this.renderQuad(shader, vertices)
+
         this.renderGameplayButtons(
             game.gameplayButtons
         );
 
-    }
 
+    }
 
     renderLoading(game) {
     }
@@ -839,11 +1057,14 @@ export class Renderer {
 
 
     renderLevelCompleted(game) {
+        this.renderGameplayButtons(
+            game.gameplayButtons
+        );
     }
 
 
     render(game) {
-
+        console.log("Current game state:", game.stateManager.current);
         if (resizeFramebuffer(this.gl, this.canvas, this.framebuffer)) {
             game.gameplayButtons.updateLayout();
         }

@@ -20,6 +20,7 @@ uniform bool u_active;
 uniform float u_alignment;
 uniform float u_spinAngle;
 uniform vec2 u_screenCenter;
+uniform bool u_engagedOnce;
 
 out vec4 outColor;
 
@@ -138,10 +139,15 @@ void main() {
         patternAlpha
     );
 
+    if (u_engagedOnce){
+        brightness *= 0.6;
+    }
+
     vec3 color = vec3(brightness);
 
     outColor = vec4(
         color,
         u_color.a * alpha
     );
+
 }
